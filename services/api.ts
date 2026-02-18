@@ -3,15 +3,17 @@ import { Platform } from 'react-native';
 import { ApiError } from '@/types/api';
 
 function getBaseUrl(): string {
+  // Variable définie dans .env (EXPO_PUBLIC_ = accessible dans le bundle)
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) return envUrl;
+
   if (__DEV__) {
-    if (Platform.OS === 'web') {
-      return 'http://localhost:3000';
-    }
-    // Sur appareil natif (Expo Go), on récupère l'IP du PC depuis l'URL Expo
+    if (Platform.OS === 'web') return 'http://localhost:3000';
+    // Fallback : IP du PC via l'URL Expo (Expo Go sur appareil physique)
     const host = Constants.expoConfig?.hostUri?.split(':')[0];
     if (host) return `http://${host}:3000`;
   }
-  // TODO: remplacer par l'URL de production
+
   return 'https://api.eco-relais.fr';
 }
 
