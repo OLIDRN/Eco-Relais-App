@@ -1,10 +1,12 @@
-import { StyleSheet, View, Pressable } from 'react-native';
+import { StyleSheet, View, Pressable, Switch } from 'react-native';
 import { ScreenContainer, Text, Card, Avatar, Divider } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
-import { Spacing, BorderRadius } from '@/constants/theme';
+import { useTheme } from '@/contexts/theme-context';
+import { Spacing } from '@/constants/theme';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
+  const { isDark, toggleTheme } = useTheme();
 
   const menuItems = [
     { label: 'Informations personnelles', icon: 'person' },
@@ -30,6 +32,27 @@ export default function ProfileScreen() {
               Pour accéder à toutes les fonctionnalités
             </Text>
           </View>
+        </View>
+      </Card>
+
+      {/* Theme Toggle */}
+      <Card variant="outlined" style={styles.themeCard}>
+        <View style={styles.themeRow}>
+          <View>
+            <Text variant="body">Mode sombre</Text>
+            <Text variant="caption" color="textSecondary">
+              {isDark ? 'Activé' : 'Désactivé'}
+            </Text>
+          </View>
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{
+              false: colors.border,
+              true: colors.primaryLight
+            }}
+            thumbColor={isDark ? colors.primary : colors.backgroundTertiary}
+          />
         </View>
       </Card>
 
@@ -74,6 +97,14 @@ const styles = StyleSheet.create({
   userDetails: {
     marginLeft: Spacing.base,
     flex: 1,
+  },
+  themeCard: {
+    marginBottom: Spacing.lg,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   menuCard: {
     padding: 0,
