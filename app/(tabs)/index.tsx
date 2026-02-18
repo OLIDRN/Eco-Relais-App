@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -12,11 +12,14 @@ import { useAuth } from '@/contexts/auth-context';
 import { apiGet } from '@/services/api';
 import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
-// OpenFreeMap — gratuit, aucune clé requise
-MapLibreGL.setAccessToken(null);
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
-const DEFAULT_ZOOM = 14;
-const PARIS_COORDS: [number, number] = [2.3522, 48.8566]; // fallback
+const DEFAULT_REGION: Region = {
+  latitude: 48.8566,
+  longitude: 2.3522,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
+};
+
+const ZOOM_DELTA = 0.01;
 
 interface NearbyMission {
   id: string;
@@ -29,9 +32,9 @@ interface NearbyMission {
 export default function HomeScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
-  const cameraRef = useRef<any>(null);
+  const mapRef = useRef<MapView>(null);
 
-  const [coords, setCoords] = useState<[number, number] | null>(null);
+  const [region, setRegion] = useState<Region>(DEFAULT_REGION);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [missions, setMissions] = useState<NearbyMission[]>([]);
 
@@ -46,30 +49,31 @@ export default function HomeScreen() {
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      setCoords([pos.coords.longitude, pos.coords.latitude]);
+      const userRegion: Region = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        latitudeDelta: ZOOM_DELTA,
+        longitudeDelta: ZOOM_DELTA,
+      };
+      setRegion(userRegion);
+      mapRef.current?.animateToRegion(userRegion, 1000);
     })();
   }, []);
 
   // ── Missions proches ────────────────────────────────
   useEffect(() => {
-    if (!coords) return;
-    const [lng, lat] = coords;
+    if (region.latitude === DEFAULT_REGION.latitude) return;
     apiGet<{ missions: NearbyMission[] }>(
-      `/api/missions?lat=${lat}&lng=${lng}&radius=5`
+      `/api/missions?lat=${region.latitude}&lng=${region.longitude}&radius=5`
     )
       .then((data) => setMissions(data.missions ?? []))
       .catch(() => {});
-  }, [coords]);
+  }, [region.latitude]);
 
   // ── Recentrer sur l'utilisateur ─────────────────────
   const handleRecenter = useCallback(() => {
-    if (!coords || !cameraRef.current) return;
-    cameraRef.current.setCamera({
-      centerCoordinate: coords,
-      zoomLevel: DEFAULT_ZOOM,
-      animationDuration: 500,
-    });
-  }, [coords]);
+    mapRef.current?.animateToRegion(region, 500);
+  }, [region]);
 
   const markerColor = (size: NearbyMission['package_size']) => {
     if (size === 'large') return colors.accent;
@@ -77,46 +81,33 @@ export default function HomeScreen() {
     return colors.primary;
   };
 
+  const pendingMissions = missions.filter((m) => m.status === 'pending');
+
   return (
     <View style={styles.root}>
 
       {/* ── Carte plein écran ─────────────────────── */}
-      <MapLibreGL.MapView
+      <MapView
+        ref={mapRef}
         style={styles.map}
-        styleURL={MAP_STYLE}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled
+        provider={PROVIDER_DEFAULT}
+        initialRegion={DEFAULT_REGION}
+        showsUserLocation
+        showsMyLocationButton={false}
+        showsCompass={false}
       >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          zoomLevel={DEFAULT_ZOOM}
-          centerCoordinate={coords ?? PARIS_COORDS}
-          animationMode="flyTo"
-          animationDuration={1200}
-        />
-
-        <MapLibreGL.UserLocation
-          visible
-          renderMode="native"
-          androidRenderMode="compass"
-        />
-
-        {/* Marqueurs des missions disponibles */}
-        {missions
-          .filter((m) => m.status === 'pending')
-          .map((m) => (
-            <MapLibreGL.PointAnnotation
-              key={m.id}
-              id={m.id}
-              coordinate={[m.pickup_lng, m.pickup_lat]}
-            >
-              <View style={[styles.marker, { backgroundColor: markerColor(m.package_size) }]}>
-                <Ionicons name="cube" size={13} color="#fff" />
-              </View>
-            </MapLibreGL.PointAnnotation>
-          ))}
-      </MapLibreGL.MapView>
+        {pendingMissions.map((m) => (
+          <Marker
+            key={m.id}
+            coordinate={{ latitude: m.pickup_lat, longitude: m.pickup_lng }}
+            tracksViewChanges={false}
+          >
+            <View style={[styles.marker, { backgroundColor: markerColor(m.package_size) }]}>
+              <Ionicons name="cube" size={13} color="#fff" />
+            </View>
+          </Marker>
+        ))}
+      </MapView>
 
       {/* ── Barre de recherche (overlay haut) ─────── */}
       <SafeAreaView style={styles.topOverlay} edges={['top']} pointerEvents="box-none">
@@ -144,7 +135,6 @@ export default function HomeScreen() {
       {/* ── Footer overlay ────────────────────────── */}
       <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">
 
-        {/* Bannière si permissions refusées */}
         {permissionDenied && (
           <View style={[styles.banner, { backgroundColor: colors.errorLight }]} pointerEvents="none">
             <Ionicons name="warning-outline" size={15} color={colors.error} />
@@ -154,20 +144,18 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Badge missions proches */}
-        {missions.length > 0 && (
+        {pendingMissions.length > 0 && (
           <View
             style={[styles.badge, { backgroundColor: colors.surface, ...Shadows.sm }]}
             pointerEvents="none"
           >
             <View style={[styles.dot, { backgroundColor: colors.primary }]} />
             <Text variant="caption" color="textSecondary">
-              {missions.filter((m) => m.status === 'pending').length} colis à proximité
+              {pendingMissions.length} colis à proximité
             </Text>
           </View>
         )}
 
-        {/* CTA principal */}
         <Button
           title="Envoyer un colis"
           onPress={() => router.push('/(tabs)/packages')}
@@ -187,8 +175,6 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-
-  // Header
   topOverlay: {
     position: 'absolute',
     top: 0,
@@ -212,8 +198,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Bouton recentrer
   recenterBtn: {
     position: 'absolute',
     right: Spacing.base,
@@ -224,8 +208,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Footer
   bottomOverlay: {
     position: 'absolute',
     bottom: 0,
@@ -256,8 +238,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-
-  // Marqueur colis
   marker: {
     width: 32,
     height: 32,

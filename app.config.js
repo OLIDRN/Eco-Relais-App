@@ -48,7 +48,6 @@ module.exports = {
           'Eco-Relais utilise votre position pour trouver les relais et colis près de chez vous.',
       },
     ],
-    '@maplibre/maplibre-react-native',
   ],
   experiments: {
     typedRoutes: true,
