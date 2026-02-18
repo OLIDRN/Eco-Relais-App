@@ -1,21 +1,39 @@
 /**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
+ * Hooks pour la gestion du thème Eco-Relais
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, type ThemeColors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+/**
+ * Récupère une couleur du thème actuel
+ */
 export function useThemeColor(
   props: { light?: string; dark?: string },
-  colorName: keyof typeof Colors.light & keyof typeof Colors.dark
-) {
+  colorName: keyof ThemeColors
+): string {
   const theme = useColorScheme() ?? 'light';
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
     return colorFromProps;
-  } else {
-    return Colors[theme][colorName];
   }
+
+  return Colors[theme][colorName];
+}
+
+/**
+ * Récupère toutes les couleurs du thème actuel
+ */
+export function useThemeColors() {
+  const theme = useColorScheme() ?? 'light';
+  return Colors[theme];
+}
+
+/**
+ * Vérifie si le thème actuel est sombre
+ */
+export function useIsDarkMode(): boolean {
+  const theme = useColorScheme();
+  return theme === 'dark';
 }
