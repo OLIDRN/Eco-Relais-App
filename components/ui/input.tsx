@@ -101,6 +101,7 @@ export function Input({
           ]}
           placeholderTextColor={colors.textTertiary}
           editable={editable}
+          includeFontPadding={false}
           onFocus={(e) => {
             setIsFocused(true);
             props.onFocus?.(e);
@@ -152,8 +153,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    ...Typography.body,
+    fontSize: Typography.body.fontSize,
+    fontWeight: Typography.body.fontWeight,
     fontFamily: FontFamily.regular,
+    // Pas de lineHeight ici : il coupe le texte dans un container à hauteur fixe
     paddingVertical: 0,
   },
   iconLeft: {
