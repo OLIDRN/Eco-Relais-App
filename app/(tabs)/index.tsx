@@ -1,98 +1,104 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
+import { ScreenContainer, Text, Card, Button } from '@/components/ui';
+import { useThemeColors } from '@/hooks/use-theme-color';
+import { Spacing, BorderRadius } from '@/constants/theme';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const colors = useThemeColors();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <ScreenContainer>
+      <View style={styles.header}>
+        <Text variant="h3">Accueil</Text>
+        <Text variant="body" color="textSecondary">
+          Trouvez un relais près de chez vous
+        </Text>
+      </View>
+
+      {/* Map Placeholder */}
+      <View
+        style={[
+          styles.mapPlaceholder,
+          { backgroundColor: colors.backgroundTertiary },
+        ]}
+      >
+        <Text variant="body" color="textTertiary" center>
+          Carte interactive
+        </Text>
+        <Text variant="caption" color="textTertiary" center>
+          (Mapbox à venir)
+        </Text>
+      </View>
+
+      {/* Quick Actions */}
+      <View style={styles.actions}>
+        <Card
+          style={[styles.actionCard, { backgroundColor: colors.primaryLight }]}
+          onPress={() => {}}
+        >
+          <Text variant="h5" style={{ color: colors.primary }}>
+            Envoyer
+          </Text>
+          <Text variant="bodySmall" style={{ color: colors.primary }}>
+            un colis
+          </Text>
+        </Card>
+
+        <Card
+          style={[styles.actionCard, { backgroundColor: colors.secondaryLight }]}
+          onPress={() => {}}
+        >
+          <Text variant="h5" style={{ color: colors.secondary }}>
+            Recevoir
+          </Text>
+          <Text variant="bodySmall" style={{ color: colors.secondary }}>
+            un colis
+          </Text>
+        </Card>
+      </View>
+
+      {/* Nearby Relays Preview */}
+      <View style={styles.section}>
+        <Text variant="h5" style={styles.sectionTitle}>
+          Relais à proximité
+        </Text>
+        <Card variant="outlined">
+          <Text variant="body" color="textSecondary" center>
+            Activez la géolocalisation pour voir les relais
+          </Text>
+        </Card>
+      </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  header: {
+    marginBottom: Spacing.lg,
+    marginTop: Spacing.base,
+  },
+  mapPlaceholder: {
+    height: 200,
+    borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  actions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  actionCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xl,
+  },
+  section: {
+    marginBottom: Spacing.lg,
+  },
+  sectionTitle: {
+    marginBottom: Spacing.md,
   },
 });
