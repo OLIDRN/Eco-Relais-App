@@ -1,104 +1,270 @@
-import { StyleSheet, View } from 'react-native';
-import { ScreenContainer, Text, Card, Button } from '@/components/ui';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { View, StyleSheet, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import MapLibreGL from '@maplibre/maplibre-react-native';
+import * as Location from 'expo-location';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+
+import { Text, Button } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
-import { Spacing, BorderRadius } from '@/constants/theme';
+import { useAuth } from '@/contexts/auth-context';
+import { apiGet } from '@/services/api';
+import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
+
+// OpenFreeMap — gratuit, aucune clé requise
+MapLibreGL.setAccessToken(null);
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const DEFAULT_ZOOM = 14;
+const PARIS_COORDS: [number, number] = [2.3522, 48.8566]; // fallback
+
+interface NearbyMission {
+  id: string;
+  pickup_lat: number;
+  pickup_lng: number;
+  status: string;
+  package_size: 'small' | 'medium' | 'large';
+}
 
 export default function HomeScreen() {
   const colors = useThemeColors();
+  const { user } = useAuth();
+  const cameraRef = useRef<any>(null);
+
+  const [coords, setCoords] = useState<[number, number] | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [missions, setMissions] = useState<NearbyMission[]>([]);
+
+  // ── Géolocalisation ─────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setPermissionDenied(true);
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setCoords([pos.coords.longitude, pos.coords.latitude]);
+    })();
+  }, []);
+
+  // ── Missions proches ────────────────────────────────
+  useEffect(() => {
+    if (!coords) return;
+    const [lng, lat] = coords;
+    apiGet<{ missions: NearbyMission[] }>(
+      `/api/missions?lat=${lat}&lng=${lng}&radius=5`
+    )
+      .then((data) => setMissions(data.missions ?? []))
+      .catch(() => {});
+  }, [coords]);
+
+  // ── Recentrer sur l'utilisateur ─────────────────────
+  const handleRecenter = useCallback(() => {
+    if (!coords || !cameraRef.current) return;
+    cameraRef.current.setCamera({
+      centerCoordinate: coords,
+      zoomLevel: DEFAULT_ZOOM,
+      animationDuration: 500,
+    });
+  }, [coords]);
+
+  const markerColor = (size: NearbyMission['package_size']) => {
+    if (size === 'large') return colors.accent;
+    if (size === 'medium') return colors.secondary;
+    return colors.primary;
+  };
 
   return (
-    <ScreenContainer>
-      <View style={styles.header}>
-        <Text variant="h3">Accueil</Text>
-        <Text variant="body" color="textSecondary">
-          Trouvez un relais près de chez vous
-        </Text>
-      </View>
+    <View style={styles.root}>
 
-      {/* Map Placeholder */}
-      <View
-        style={[
-          styles.mapPlaceholder,
-          { backgroundColor: colors.backgroundTertiary },
-        ]}
+      {/* ── Carte plein écran ─────────────────────── */}
+      <MapLibreGL.MapView
+        style={styles.map}
+        styleURL={MAP_STYLE}
+        logoEnabled={false}
+        attributionEnabled={false}
+        compassEnabled
       >
-        <Text variant="body" color="textTertiary" center>
-          Carte interactive
-        </Text>
-        <Text variant="caption" color="textTertiary" center>
-          (Mapbox à venir)
-        </Text>
-      </View>
+        <MapLibreGL.Camera
+          ref={cameraRef}
+          zoomLevel={DEFAULT_ZOOM}
+          centerCoordinate={coords ?? PARIS_COORDS}
+          animationMode="flyTo"
+          animationDuration={1200}
+        />
 
-      {/* Quick Actions */}
-      <View style={styles.actions}>
-        <Card
-          style={[styles.actionCard, { backgroundColor: colors.primaryLight }]}
-          onPress={() => {}}
-        >
-          <Text variant="h5" style={{ color: colors.primary }}>
-            Envoyer
-          </Text>
-          <Text variant="bodySmall" style={{ color: colors.primary }}>
-            un colis
-          </Text>
-        </Card>
+        <MapLibreGL.UserLocation
+          visible
+          renderMode="native"
+          androidRenderMode="compass"
+        />
 
-        <Card
-          style={[styles.actionCard, { backgroundColor: colors.secondaryLight }]}
-          onPress={() => {}}
-        >
-          <Text variant="h5" style={{ color: colors.secondary }}>
-            Recevoir
-          </Text>
-          <Text variant="bodySmall" style={{ color: colors.secondary }}>
-            un colis
-          </Text>
-        </Card>
-      </View>
+        {/* Marqueurs des missions disponibles */}
+        {missions
+          .filter((m) => m.status === 'pending')
+          .map((m) => (
+            <MapLibreGL.PointAnnotation
+              key={m.id}
+              id={m.id}
+              coordinate={[m.pickup_lng, m.pickup_lat]}
+            >
+              <View style={[styles.marker, { backgroundColor: markerColor(m.package_size) }]}>
+                <Ionicons name="cube" size={13} color="#fff" />
+              </View>
+            </MapLibreGL.PointAnnotation>
+          ))}
+      </MapLibreGL.MapView>
 
-      {/* Nearby Relays Preview */}
-      <View style={styles.section}>
-        <Text variant="h5" style={styles.sectionTitle}>
-          Relais à proximité
-        </Text>
-        <Card variant="outlined">
-          <Text variant="body" color="textSecondary" center>
-            Activez la géolocalisation pour voir les relais
+      {/* ── Barre de recherche (overlay haut) ─────── */}
+      <SafeAreaView style={styles.topOverlay} edges={['top']} pointerEvents="box-none">
+        <View style={[styles.searchBar, { backgroundColor: colors.surface, ...Shadows.md }]}>
+          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+          <Text variant="bodySmall" color="textSecondary" style={{ flex: 1 }}>
+            {user ? `Bonjour ${user.first_name} 👋` : 'Rechercher une adresse...'}
           </Text>
-        </Card>
-      </View>
-    </ScreenContainer>
+          <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
+            <Text variant="labelSmall" style={{ color: colors.primary }}>
+              {user?.first_name?.[0]?.toUpperCase() ?? '?'}
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      {/* ── Bouton recentrer ──────────────────────── */}
+      <Pressable
+        onPress={handleRecenter}
+        style={[styles.recenterBtn, { backgroundColor: colors.surface, ...Shadows.md }]}
+      >
+        <Ionicons name="locate-outline" size={22} color={colors.primary} />
+      </Pressable>
+
+      {/* ── Footer overlay ────────────────────────── */}
+      <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">
+
+        {/* Bannière si permissions refusées */}
+        {permissionDenied && (
+          <View style={[styles.banner, { backgroundColor: colors.errorLight }]} pointerEvents="none">
+            <Ionicons name="warning-outline" size={15} color={colors.error} />
+            <Text variant="caption" color="error" style={{ marginLeft: Spacing.xs, flex: 1 }}>
+              Activez la géolocalisation pour voir les relais proches.
+            </Text>
+          </View>
+        )}
+
+        {/* Badge missions proches */}
+        {missions.length > 0 && (
+          <View
+            style={[styles.badge, { backgroundColor: colors.surface, ...Shadows.sm }]}
+            pointerEvents="none"
+          >
+            <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+            <Text variant="caption" color="textSecondary">
+              {missions.filter((m) => m.status === 'pending').length} colis à proximité
+            </Text>
+          </View>
+        )}
+
+        {/* CTA principal */}
+        <Button
+          title="Envoyer un colis"
+          onPress={() => router.push('/(tabs)/packages')}
+          fullWidth
+          leftIcon={<Ionicons name="cube-outline" size={18} color="#fff" />}
+        />
+      </SafeAreaView>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: Spacing.lg,
-    marginTop: Spacing.base,
-  },
-  mapPlaceholder: {
-    height: 200,
-    borderRadius: BorderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.xl,
-  },
-  actionCard: {
+  root: {
     flex: 1,
+  },
+  map: {
+    flex: 1,
+  },
+
+  // Header
+  topOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing.base,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.xl,
   },
-  section: {
-    marginBottom: Spacing.lg,
+
+  // Bouton recentrer
+  recenterBtn: {
+    position: 'absolute',
+    right: Spacing.base,
+    bottom: 140,
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sectionTitle: {
-    marginBottom: Spacing.md,
+
+  // Footer
+  bottomOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    gap: Spacing.xs,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  // Marqueur colis
+  marker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: '#fff',
   },
 });
