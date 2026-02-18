@@ -3,7 +3,7 @@
  */
 
 import { Colors, type ThemeColors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/contexts/theme-context';
 
 /**
  * Récupère une couleur du thème actuel
@@ -12,7 +12,7 @@ export function useThemeColor(
   props: { light?: string; dark?: string },
   colorName: keyof ThemeColors
 ): string {
-  const theme = useColorScheme() ?? 'light';
+  const { theme } = useTheme();
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
@@ -26,7 +26,7 @@ export function useThemeColor(
  * Récupère toutes les couleurs du thème actuel
  */
 export function useThemeColors() {
-  const theme = useColorScheme() ?? 'light';
+  const { theme } = useTheme();
   return Colors[theme];
 }
 
@@ -34,6 +34,6 @@ export function useThemeColors() {
  * Vérifie si le thème actuel est sombre
  */
 export function useIsDarkMode(): boolean {
-  const theme = useColorScheme();
-  return theme === 'dark';
+  const { isDark } = useTheme();
+  return isDark;
 }
