@@ -41,6 +41,13 @@ module.exports = {
         },
       },
     ],
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          'Eco-Relais utilise votre position pour trouver les relais et colis près de chez vous.',
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,
