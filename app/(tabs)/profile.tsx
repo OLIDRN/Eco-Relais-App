@@ -1,12 +1,14 @@
 import { StyleSheet, View, Pressable, Switch } from 'react-native';
-import { ScreenContainer, Text, Card, Avatar, Divider } from '@/components/ui';
+import { ScreenContainer, Text, Card, Avatar, Divider, Button } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useTheme } from '@/contexts/theme-context';
+import { useAuth } from '@/contexts/auth-context';
 import { Spacing } from '@/constants/theme';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
   const { isDark, toggleTheme } = useTheme();
+  const { user, logout } = useAuth();
 
   const menuItems = [
     { label: 'Informations personnelles', icon: 'person' },
@@ -15,6 +17,12 @@ export default function ProfileScreen() {
     { label: 'Notifications', icon: 'bell' },
     { label: 'Aide et support', icon: 'help' },
   ];
+
+  const roleLabel: Record<string, string> = {
+    client: 'Client',
+    partner: 'Voisin-Relais',
+    admin: 'Administrateur',
+  };
 
   return (
     <ScreenContainer>
@@ -25,12 +33,17 @@ export default function ProfileScreen() {
       {/* User Card */}
       <Card style={styles.userCard}>
         <View style={styles.userInfo}>
-          <Avatar name="Utilisateur" size="large" />
+          <Avatar name={user ? `${user.first_name} ${user.last_name}` : 'U'} size="large" />
           <View style={styles.userDetails}>
-            <Text variant="h5">Connectez-vous</Text>
+            <Text variant="h5">{user ? `${user.first_name} ${user.last_name}` : 'Utilisateur'}</Text>
             <Text variant="bodySmall" color="textSecondary">
-              Pour accéder à toutes les fonctionnalités
+              {user?.email ?? ''}
             </Text>
+            {user?.role && (
+              <Text variant="caption" color="primary">
+                {roleLabel[user.role] ?? user.role}
+              </Text>
+            )}
           </View>
         </View>
       </Card>
@@ -49,7 +62,7 @@ export default function ProfileScreen() {
             onValueChange={toggleTheme}
             trackColor={{
               false: colors.border,
-              true: colors.primaryLight
+              true: colors.primaryLight,
             }}
             thumbColor={isDark ? colors.primary : colors.backgroundTertiary}
           />
@@ -74,6 +87,15 @@ export default function ProfileScreen() {
         ))}
       </Card>
 
+      {/* Logout */}
+      <Button
+        title="Se déconnecter"
+        variant="outline"
+        onPress={logout}
+        fullWidth
+        style={styles.logoutButton}
+      />
+
       {/* Version */}
       <Text variant="caption" color="textTertiary" center style={styles.version}>
         Eco-Relais v1.0.0
@@ -97,6 +119,7 @@ const styles = StyleSheet.create({
   userDetails: {
     marginLeft: Spacing.base,
     flex: 1,
+    gap: Spacing.xs,
   },
   themeCard: {
     marginBottom: Spacing.lg,
@@ -109,6 +132,7 @@ const styles = StyleSheet.create({
   menuCard: {
     padding: 0,
     overflow: 'hidden',
+    marginBottom: Spacing.lg,
   },
   menuItem: {
     flexDirection: 'row',
@@ -117,7 +141,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.base,
     paddingHorizontal: Spacing.base,
   },
+  logoutButton: {
+    marginBottom: Spacing.lg,
+  },
   version: {
-    marginTop: Spacing['2xl'],
+    marginTop: Spacing.base,
   },
 });
