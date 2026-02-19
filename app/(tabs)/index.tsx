@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-import { Text, Button } from '@/components/ui';
+import { Text, Button, Badge } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
-import { apiGet } from '@/services/api';
+import { apiGet, apiPut } from '@/services/api';
 import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Mission, PackageSize, ApiError } from '@/types/api';
+
+// ── Constantes ─────────────────────────────────────────────────────────────
 
 const DEFAULT_REGION: Region = {
   latitude: 48.8566,
@@ -21,24 +24,34 @@ const DEFAULT_REGION: Region = {
 
 const ZOOM_DELTA = 0.01;
 
-interface NearbyMission {
-  id: string;
-  pickup_lat: number;
-  pickup_lng: number;
-  status: string;
-  package_size: 'small' | 'medium' | 'large';
+const SIZE_LABEL: Record<PackageSize, string> = {
+  small:  'Petit',
+  medium: 'Moyen',
+  large:  'Grand',
+};
+
+function formatPrice(price: number): string {
+  return price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 }
+
+// ── HomeScreen ──────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
   const mapRef = useRef<MapView>(null);
+  const isPartner = user?.role === 'partner';
 
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
   const [permissionDenied, setPermissionDenied] = useState(false);
-  const [missions, setMissions] = useState<NearbyMission[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
 
-  // ── Géolocalisation ─────────────────────────────────
+  // Bottom sheet état
+  const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
+  const [acceptLoading, setAcceptLoading] = useState(false);
+  const [acceptError, setAcceptError] = useState('');
+
+  // ── Géolocalisation ───────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -60,22 +73,50 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // ── Missions proches ────────────────────────────────
-  useEffect(() => {
+  // ── Missions proches ──────────────────────────────────────────────────────
+  const fetchMissions = useCallback(() => {
     if (region.latitude === DEFAULT_REGION.latitude) return;
-    apiGet<{ missions: NearbyMission[] }>(
+    apiGet<{ missions: Mission[] }>(
       `/api/missions?lat=${region.latitude}&lng=${region.longitude}&radius=5`
     )
       .then((data) => setMissions(data.missions ?? []))
       .catch(() => {});
-  }, [region.latitude]);
+  }, [region.latitude, region.longitude]);
 
-  // ── Recentrer sur l'utilisateur ─────────────────────
+  useEffect(() => {
+    fetchMissions();
+  }, [fetchMissions]);
+
+  // ── Recentrer ─────────────────────────────────────────────────────────────
   const handleRecenter = useCallback(() => {
     mapRef.current?.animateToRegion(region, 500);
   }, [region]);
 
-  const markerColor = (size: NearbyMission['package_size']) => {
+  // ── Accepter une mission ──────────────────────────────────────────────────
+  const handleAccept = useCallback(async () => {
+    if (!selectedMission) return;
+    setAcceptLoading(true);
+    setAcceptError('');
+    try {
+      await apiPut(`/api/missions/${selectedMission.id}/accept`, {});
+      // Retirer le marqueur accepté de la liste
+      setMissions((prev) => prev.filter((m) => m.id !== selectedMission.id));
+      setSelectedMission(null);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setAcceptError(apiErr.message ?? 'Impossible d\'accepter cette mission.');
+    } finally {
+      setAcceptLoading(false);
+    }
+  }, [selectedMission]);
+
+  const handleCloseSheet = useCallback(() => {
+    setSelectedMission(null);
+    setAcceptError('');
+  }, []);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const markerColor = (size: PackageSize) => {
     if (size === 'large') return colors.accent;
     if (size === 'medium') return colors.secondary;
     return colors.primary;
@@ -86,7 +127,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.root}>
 
-      {/* ── Carte plein écran ─────────────────────── */}
+      {/* ── Carte plein écran ──────────────────────────────────────────── */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -101,15 +142,20 @@ export default function HomeScreen() {
             key={m.id}
             coordinate={{ latitude: m.pickup_lat, longitude: m.pickup_lng }}
             tracksViewChanges={false}
+            onPress={isPartner ? () => setSelectedMission(m) : undefined}
           >
-            <View style={[styles.marker, { backgroundColor: markerColor(m.package_size) }]}>
+            <View style={[
+              styles.marker,
+              { backgroundColor: markerColor(m.package_size) },
+              isPartner && styles.markerClickable,
+            ]}>
               <Ionicons name="cube" size={13} color="#fff" />
             </View>
           </Marker>
         ))}
       </MapView>
 
-      {/* ── Barre de recherche (overlay haut) ─────── */}
+      {/* ── Overlay haut : barre de recherche ─────────────────────────── */}
       <SafeAreaView style={styles.topOverlay} edges={['top']} pointerEvents="box-none">
         <View style={[styles.searchBar, { backgroundColor: colors.surface, ...Shadows.md }]}>
           <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
@@ -122,9 +168,19 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Hint cliquable pour les partners */}
+        {isPartner && pendingMissions.length > 0 && (
+          <View style={[styles.partnerHint, { backgroundColor: colors.primaryLight }]}>
+            <Ionicons name="finger-print-outline" size={13} color={colors.primary} />
+            <Text variant="caption" style={{ color: colors.primary, marginLeft: Spacing.xs }}>
+              Appuyez sur un colis pour l'accepter
+            </Text>
+          </View>
+        )}
       </SafeAreaView>
 
-      {/* ── Bouton recentrer ──────────────────────── */}
+      {/* ── Bouton recentrer ───────────────────────────────────────────── */}
       <Pressable
         onPress={handleRecenter}
         style={[styles.recenterBtn, { backgroundColor: colors.surface, ...Shadows.md }]}
@@ -132,9 +188,8 @@ export default function HomeScreen() {
         <Ionicons name="locate-outline" size={22} color={colors.primary} />
       </Pressable>
 
-      {/* ── Footer overlay ────────────────────────── */}
+      {/* ── Footer overlay ─────────────────────────────────────────────── */}
       <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">
-
         {permissionDenied && (
           <View style={[styles.banner, { backgroundColor: colors.errorLight }]} pointerEvents="none">
             <Ionicons name="warning-outline" size={15} color={colors.error} />
@@ -156,31 +211,119 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <Button
-          title="Envoyer un colis"
-          onPress={() => router.push('/(tabs)/packages')}
-          fullWidth
-          leftIcon={<Ionicons name="cube-outline" size={18} color="#fff" />}
-        />
+        {!isPartner && (
+          <Button
+            title="Envoyer un colis"
+            onPress={() => router.push('/(tabs)/packages')}
+            fullWidth
+            leftIcon={<Ionicons name="cube-outline" size={18} color="#fff" />}
+          />
+        )}
       </SafeAreaView>
+
+      {/* ── Bottom sheet : détail mission (partner uniquement) ─────────── */}
+      <Modal
+        visible={selectedMission !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={handleCloseSheet}
+      >
+        <Pressable style={styles.sheetOverlay} onPress={handleCloseSheet} />
+
+        <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+          {/* Handle */}
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+
+          {selectedMission && (
+            <>
+              {/* Titre + taille */}
+              <View style={styles.sheetRow}>
+                <Text variant="h5" style={styles.sheetTitle}>
+                  {selectedMission.package_title}
+                </Text>
+                <Badge
+                  label={SIZE_LABEL[selectedMission.package_size]}
+                  variant="neutral"
+                  size="small"
+                />
+              </View>
+
+              {/* Adresses */}
+              <View style={[styles.sheetRow, styles.sheetAddressRow]}>
+                <View style={[styles.sheetAddressIcon, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name="location" size={14} color={colors.primary} />
+                </View>
+                <Text variant="bodySmall" color="textSecondary" style={{ flex: 1 }}>
+                  {selectedMission.pickup_address}
+                </Text>
+              </View>
+              <View style={styles.sheetArrow}>
+                <Ionicons name="arrow-down" size={14} color={colors.textTertiary} />
+              </View>
+              <View style={[styles.sheetRow, styles.sheetAddressRow]}>
+                <View style={[styles.sheetAddressIcon, { backgroundColor: colors.accentLight }]}>
+                  <Ionicons name="flag" size={14} color={colors.accent} />
+                </View>
+                <Text variant="bodySmall" color="textSecondary" style={{ flex: 1 }}>
+                  {selectedMission.delivery_address}
+                </Text>
+              </View>
+
+              {/* Créneau + prix */}
+              <View style={[styles.sheetRow, styles.sheetMeta]}>
+                <View style={styles.sheetMetaItem}>
+                  <Ionicons name="time-outline" size={15} color={colors.textSecondary} />
+                  <Text variant="bodySmall" color="textSecondary" style={{ marginLeft: Spacing.xs }}>
+                    {selectedMission.pickup_time_slot}
+                  </Text>
+                </View>
+                <Text variant="h5" color="primary">
+                  {formatPrice(selectedMission.price)}
+                </Text>
+              </View>
+
+              {/* Erreur */}
+              {acceptError !== '' && (
+                <Text variant="caption" color="error" center style={styles.sheetError}>
+                  {acceptError}
+                </Text>
+              )}
+
+              {/* CTA */}
+              <Button
+                title="Accepter cette mission"
+                variant="primary"
+                fullWidth
+                loading={acceptLoading}
+                onPress={handleAccept}
+                leftIcon={<Ionicons name="checkmark-circle-outline" size={18} color="#fff" />}
+                style={styles.sheetBtn}
+              />
+
+              <Pressable onPress={handleCloseSheet} style={styles.sheetClose}>
+                <Text variant="bodySmall" color="textSecondary">Fermer</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </Modal>
 
     </View>
   );
 }
 
+// ── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
+  root: { flex: 1 },
+  map: { flex: 1 },
+
+  // Overlays carte
   topOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0,
     paddingHorizontal: Spacing.base,
+    gap: Spacing.sm,
   },
   searchBar: {
     flexDirection: 'row',
@@ -192,59 +335,100 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  partnerHint: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
   },
   recenterBtn: {
     position: 'absolute',
     right: Spacing.base,
     bottom: 140,
-    width: 44,
-    height: 44,
+    width: 44, height: 44,
     borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   bottomOverlay: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 0, left: 0, right: 0,
     paddingHorizontal: Spacing.base,
     paddingBottom: Spacing.sm,
     gap: Spacing.sm,
   },
   banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     borderRadius: BorderRadius.md,
-    padding: Spacing.sm,
-    paddingHorizontal: Spacing.md,
+    padding: Spacing.sm, paddingHorizontal: Spacing.md,
   },
   badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     alignSelf: 'center',
     borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs,
     gap: Spacing.xs,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+
+  // Marqueurs
   marker: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: '#fff',
+  },
+  markerClickable: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 3,
+  },
+
+  // Bottom sheet
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  sheet: {
+    borderTopLeftRadius: BorderRadius['2xl'],
+    borderTopRightRadius: BorderRadius['2xl'],
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing['2xl'],
+    paddingTop: Spacing.md,
+    ...Shadows.xl,
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: Spacing.lg,
+  },
+  sheetRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2.5,
-    borderColor: '#fff',
+    marginBottom: Spacing.md,
+  },
+  sheetTitle: { flex: 1, marginRight: Spacing.sm },
+  sheetAddressRow: { gap: Spacing.sm },
+  sheetAddressIcon: {
+    width: 26, height: 26, borderRadius: BorderRadius.base,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sheetArrow: {
+    paddingLeft: Spacing.sm + 13,
+    marginBottom: Spacing.xs,
+  },
+  sheetMeta: {
+    justifyContent: 'space-between',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.lg,
+  },
+  sheetMetaItem: { flexDirection: 'row', alignItems: 'center' },
+  sheetError: { marginBottom: Spacing.sm },
+  sheetBtn: { marginBottom: Spacing.sm },
+  sheetClose: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
   },
 });

@@ -1,13 +1,270 @@
-import { StyleSheet, View } from 'react-native';
-import { ScreenContainer, Text, Card, Button } from '@/components/ui';
-import { useThemeColors } from '@/hooks/use-theme-color';
-import { Spacing } from '@/constants/theme';
+import { useCallback, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function RelayScreen() {
+import { Text, Card, Badge, Button, ScreenContainer, Divider } from '@/components/ui';
+import { useThemeColors } from '@/hooks/use-theme-color';
+import { useAuth } from '@/contexts/auth-context';
+import { apiGet, apiPut } from '@/services/api';
+import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Mission, MissionStatus, PackageSize, ApiError } from '@/types/api';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+type BadgeVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'error' | 'warning' | 'info' | 'neutral';
+
+const STATUS_CONFIG: Record<MissionStatus, { label: string; variant: BadgeVariant }> = {
+  pending:    { label: 'En attente',   variant: 'neutral' },
+  accepted:   { label: 'Assigné',      variant: 'info' },
+  collected:  { label: 'Récupéré',     variant: 'accent' },
+  in_transit: { label: 'En livraison', variant: 'warning' },
+  delivered:  { label: 'Livré',        variant: 'success' },
+  cancelled:  { label: 'Annulé',       variant: 'error' },
+};
+
+const SIZE_LABEL: Record<PackageSize, string> = {
+  small:  'Petit',
+  medium: 'Moyen',
+  large:  'Grand',
+};
+
+function formatPrice(price: number): string {
+  return price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+}
+
+// ── MissionActionCard ──────────────────────────────────────────────────────
+
+interface MissionActionCardProps {
+  mission: Mission;
+  loadingActionId: string | null;
+  onAction: (mission: Mission) => void;
+}
+
+function MissionActionCard({ mission, loadingActionId, onAction }: MissionActionCardProps) {
+  const colors = useThemeColors();
+  const statusConfig = STATUS_CONFIG[mission.status];
+  const isLoading = loadingActionId === mission.id;
+
+  const ACTION_CONFIG: Partial<Record<MissionStatus, { label: string; icon: string; variant: 'primary' | 'accent' | 'success' }>> = {
+    accepted:   { label: 'Collecter le colis',      icon: 'cube-outline',     variant: 'primary' },
+    collected:  { label: 'Démarrer la livraison',   icon: 'bicycle-outline',  variant: 'accent' },
+    in_transit: { label: 'Marquer comme livré',     icon: 'checkmark-circle-outline', variant: 'success' },
+  };
+
+  const action = ACTION_CONFIG[mission.status];
+
+  return (
+    <Card style={styles.missionCard}>
+      {/* Ligne 1 : titre + taille */}
+      <View style={styles.cardRow}>
+        <Text variant="label" style={styles.cardTitle} numberOfLines={1}>
+          {mission.package_title}
+        </Text>
+        <Badge label={SIZE_LABEL[mission.package_size]} variant="neutral" size="small" />
+      </View>
+
+      {/* Ligne 2 : adresses */}
+      <View style={[styles.cardRow, styles.addressRow]}>
+        <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+        <Text variant="bodySmall" color="textSecondary" style={styles.address} numberOfLines={1}>
+          {mission.pickup_address}
+        </Text>
+        <Ionicons name="arrow-forward" size={14} color={colors.textTertiary} />
+        <Text variant="bodySmall" color="textSecondary" style={styles.address} numberOfLines={1}>
+          {mission.delivery_address}
+        </Text>
+      </View>
+
+      {/* Ligne 3 : créneau */}
+      <View style={styles.cardRow}>
+        <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+        <Text variant="caption" color="textSecondary" style={{ marginLeft: Spacing.xs }}>
+          {mission.pickup_time_slot}
+        </Text>
+      </View>
+
+      <Divider spacing="sm" />
+
+      {/* Ligne 4 : statut + prix */}
+      <View style={[styles.cardRow, styles.footerRow]}>
+        <Badge label={statusConfig.label} variant={statusConfig.variant} size="small" />
+        <Text variant="label" color="primary">{formatPrice(mission.price)}</Text>
+      </View>
+
+      {/* Bouton d'action */}
+      {action && (
+        <Button
+          title={action.label}
+          variant={action.variant}
+          size="small"
+          fullWidth
+          loading={isLoading}
+          leftIcon={<Ionicons name={action.icon as any} size={16} color="#fff" />}
+          onPress={() => onAction(mission)}
+          style={styles.actionBtn}
+        />
+      )}
+
+      {mission.status === 'delivered' && (
+        <View style={[styles.deliveredBadge, { backgroundColor: colors.successLight }]}>
+          <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+          <Text variant="caption" style={{ color: colors.success, marginLeft: Spacing.xs }}>
+            Mission terminée
+          </Text>
+        </View>
+      )}
+    </Card>
+  );
+}
+
+// ── PartnerView ────────────────────────────────────────────────────────────
+
+function PartnerView() {
+  const colors = useThemeColors();
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [totalEarnings, setTotalEarnings] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
+
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const [missionsData, earningsData] = await Promise.all([
+        apiGet<{ missions: Mission[] }>('/api/missions'),
+        apiGet<{ total_earnings: number }>('/api/payments/earnings').catch(() => ({ total_earnings: 0 })),
+      ]);
+      setMissions(missionsData.missions ?? []);
+      setTotalEarnings(earningsData.total_earnings);
+    } catch {
+      // garde l'état précédent en cas d'erreur réseau
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
+
+  const handleAction = useCallback(async (mission: Mission) => {
+    setLoadingActionId(mission.id);
+    setActionError('');
+    try {
+      if (mission.status === 'accepted') {
+        await apiPut(`/api/missions/${mission.id}/collect`, {});
+      } else if (mission.status === 'collected') {
+        await apiPut(`/api/missions/${mission.id}/status`, { status: 'in_transit' });
+      } else if (mission.status === 'in_transit') {
+        await apiPut(`/api/missions/${mission.id}/deliver`, {});
+      }
+      await fetchData();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setActionError(apiErr.message ?? 'Une erreur est survenue.');
+    } finally {
+      setLoadingActionId(null);
+    }
+  }, [fetchData]);
+
+  const activeMissions = missions.filter(m => m.status !== 'cancelled');
+
+  return (
+    <ScreenContainer
+      scrollable
+      padded
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => fetchData(true)}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text variant="h3">Mes missions</Text>
+        <Text variant="body" color="textSecondary">
+          Gérez vos livraisons en cours
+        </Text>
+      </View>
+
+      {/* Carte gains */}
+      {totalEarnings !== null && (
+        <Card style={[styles.earningsCard, { backgroundColor: colors.primary }]}>
+          <View style={styles.earningsRow}>
+            <View>
+              <Text variant="bodySmall" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Total gagné
+              </Text>
+              <Text variant="h3" style={{ color: '#fff' }}>
+                {formatPrice(totalEarnings)}
+              </Text>
+            </View>
+            <View style={[styles.earningsIcon, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+              <Ionicons name="wallet-outline" size={28} color="#fff" />
+            </View>
+          </View>
+        </Card>
+      )}
+
+      {/* Erreur action */}
+      {actionError !== '' && (
+        <Card variant="outlined" style={[styles.errorCard, { borderColor: colors.error }]}>
+          <Text variant="caption" color="error">{actionError}</Text>
+        </Card>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      )}
+
+      {/* Empty state */}
+      {!loading && activeMissions.length === 0 && (
+        <Card variant="outlined" style={styles.emptyCard}>
+          <Ionicons name="bicycle-outline" size={36} color={colors.textTertiary} />
+          <Text variant="body" color="textSecondary" center style={{ marginTop: Spacing.sm }}>
+            Aucune mission en cours
+          </Text>
+          <Text variant="bodySmall" color="textTertiary" center>
+            Acceptez une mission depuis la carte d'accueil
+          </Text>
+        </Card>
+      )}
+
+      {/* Liste missions */}
+      {!loading && activeMissions.map((mission) => (
+        <MissionActionCard
+          key={mission.id}
+          mission={mission}
+          loadingActionId={loadingActionId}
+          onAction={handleAction}
+        />
+      ))}
+
+      <View style={{ height: Spacing.xl }} />
+    </ScreenContainer>
+  );
+}
+
+// ── ClientView ─────────────────────────────────────────────────────────────
+
+function ClientView() {
   const colors = useThemeColors();
 
   return (
-    <ScreenContainer>
+    <ScreenContainer padded>
       <View style={styles.header}>
         <Text variant="h3">Devenir Relais</Text>
         <Text variant="body" color="textSecondary">
@@ -16,45 +273,25 @@ export default function RelayScreen() {
       </View>
 
       <Card style={styles.infoCard}>
-        <Text variant="h5" style={styles.cardTitle}>
+        <Text variant="h5" style={styles.cardSectionTitle}>
           Comment ça marche ?
         </Text>
 
-        <View style={styles.step}>
-          <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
-            <Text variant="label" style={{ color: colors.primary }}>1</Text>
+        {[
+          { n: '1', title: "Inscrivez-vous comme relais", desc: "Vérifiez votre identité pour commencer" },
+          { n: '2', title: "Acceptez des missions",       desc: "Collectez et livrez des colis près de chez vous" },
+          { n: '3', title: "Recevez vos gains",           desc: "Paiement sécurisé après chaque livraison" },
+        ].map((step) => (
+          <View key={step.n} style={styles.step}>
+            <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
+              <Text variant="label" style={{ color: colors.primary }}>{step.n}</Text>
+            </View>
+            <View style={styles.stepContent}>
+              <Text variant="label">{step.title}</Text>
+              <Text variant="bodySmall" color="textSecondary">{step.desc}</Text>
+            </View>
           </View>
-          <View style={styles.stepContent}>
-            <Text variant="label">Inscrivez-vous comme relais</Text>
-            <Text variant="bodySmall" color="textSecondary">
-              Vérifiez votre identité pour commencer
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.step}>
-          <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
-            <Text variant="label" style={{ color: colors.primary }}>2</Text>
-          </View>
-          <View style={styles.stepContent}>
-            <Text variant="label">Acceptez des missions</Text>
-            <Text variant="bodySmall" color="textSecondary">
-              Collectez et livrez des colis près de chez vous
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.step}>
-          <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
-            <Text variant="label" style={{ color: colors.primary }}>3</Text>
-          </View>
-          <View style={styles.stepContent}>
-            <Text variant="label">Recevez vos gains</Text>
-            <Text variant="bodySmall" color="textSecondary">
-              Paiement sécurisé après chaque livraison
-            </Text>
-          </View>
-        </View>
+        ))}
       </Card>
 
       <Button
@@ -67,15 +304,89 @@ export default function RelayScreen() {
   );
 }
 
+// ── RelayScreen ────────────────────────────────────────────────────────────
+
+export default function RelayScreen() {
+  const { user } = useAuth();
+  return user?.role === 'partner' ? <PartnerView /> : <ClientView />;
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   header: {
     marginBottom: Spacing.xl,
     marginTop: Spacing.base,
+    gap: Spacing.xs,
   },
+  // Partner
+  earningsCard: {
+    marginBottom: Spacing.lg,
+  },
+  earningsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  earningsIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorCard: {
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  centered: {
+    paddingVertical: Spacing['3xl'],
+    alignItems: 'center',
+  },
+  emptyCard: {
+    paddingVertical: Spacing['3xl'],
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  missionCard: {
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardTitle: {
+    flex: 1,
+    marginRight: Spacing.sm,
+  },
+  addressRow: {
+    gap: Spacing.xs,
+  },
+  address: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  footerRow: {
+    justifyContent: 'space-between',
+  },
+  actionBtn: {
+    marginTop: Spacing.xs,
+  },
+  deliveredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.xs,
+  },
+  // Client
   infoCard: {
     marginBottom: Spacing.xl,
   },
-  cardTitle: {
+  cardSectionTitle: {
     marginBottom: Spacing.lg,
   },
   step: {
@@ -93,6 +404,7 @@ const styles = StyleSheet.create({
   },
   stepContent: {
     flex: 1,
+    gap: Spacing.xs,
   },
   ctaButton: {
     marginTop: Spacing.base,
