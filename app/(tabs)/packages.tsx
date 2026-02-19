@@ -90,6 +90,7 @@ function MissionCard({ mission }: MissionCardProps) {
       <View style={styles.cardFooter}>
         <Badge label={statusConfig.label} variant={statusConfig.variant} size="small" />
         <View style={styles.footerRight}>
+          <Text variant="caption" color="textTertiary">Prix </Text>
           <Text variant="label" color="primary">
             {formatPrice(mission.price)}
           </Text>
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
   },
   footerRight: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
   },
   fabSpacer: {
     height: 80,
