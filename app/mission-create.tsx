@@ -37,6 +37,8 @@ export default function MissionCreateScreen() {
   const [pickupLat, setPickupLat] = useState<number | null>(null);
   const [pickupLng, setPickupLng] = useState<number | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,7 +58,25 @@ export default function MissionCreateScreen() {
       });
       setPickupLat(pos.coords.latitude);
       setPickupLng(pos.coords.longitude);
-      if (!pickupAddress) {
+
+      // Reverse geocoding → adresse lisible
+      try {
+        const [place] = await Location.reverseGeocodeAsync({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
+        if (place) {
+          const parts = [
+            place.streetNumber ?? place.name,
+            place.street,
+            place.postalCode,
+            place.city,
+          ].filter(Boolean);
+          setPickupAddress(parts.join(', '));
+        } else {
+          setPickupAddress(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
+        }
+      } catch {
         setPickupAddress(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
       }
     } catch {
@@ -64,7 +84,7 @@ export default function MissionCreateScreen() {
     } finally {
       setGpsLoading(false);
     }
-  }, [pickupAddress]);
+  }, []);
 
   // ── Validation ────────────────────────────────────────────────────────────
   function validate(): string | null {
@@ -85,6 +105,23 @@ export default function MissionCreateScreen() {
     setError('');
     setLoading(true);
 
+    // Géocodage de l'adresse de livraison si pas encore résolu
+    let dLat = deliveryLat ?? 0;
+    let dLng = deliveryLng ?? 0;
+    if (dLat === 0 && dLng === 0) {
+      try {
+        const results = await Location.geocodeAsync(deliveryAddress.trim());
+        if (results.length > 0) {
+          dLat = results[0].latitude;
+          dLng = results[0].longitude;
+          setDeliveryLat(dLat);
+          setDeliveryLng(dLng);
+        }
+      } catch {
+        // geocoding indisponible, on continue avec 0,0
+      }
+    }
+
     try {
       await apiPost<{ success: boolean; mission: Mission }>('/api/missions', {
         package_title: title.trim(),
@@ -93,8 +130,8 @@ export default function MissionCreateScreen() {
         pickup_lat: pickupLat ?? 0,
         pickup_lng: pickupLng ?? 0,
         delivery_address: deliveryAddress.trim(),
-        delivery_lat: 0, // TODO: geocoding post-MVP
-        delivery_lng: 0,
+        delivery_lat: dLat,
+        delivery_lng: dLng,
         pickup_time_slot: timeSlot.trim(),
       });
       router.back();
@@ -198,7 +235,11 @@ export default function MissionCreateScreen() {
             label="Adresse de livraison"
             placeholder="ex : 8 avenue Victor Hugo, Lyon"
             value={deliveryAddress}
-            onChangeText={setDeliveryAddress}
+            onChangeText={(v) => {
+              setDeliveryAddress(v);
+              setDeliveryLat(null);
+              setDeliveryLng(null);
+            }}
           />
 
           {/* ── Créneau ────────────────────────────────────────────── */}
