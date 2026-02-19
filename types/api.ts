@@ -30,6 +30,11 @@ export interface Mission {
   qr_code: string | null;
   created_at: string;
   completed_at: string | null;
+  // Joined fields
+  client_first_name?: string;
+  client_last_name?: string;
+  partner_first_name?: string;
+  partner_last_name?: string;
 }
 
 export interface User {

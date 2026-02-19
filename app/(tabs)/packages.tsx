@@ -58,6 +58,32 @@ function MissionCard({ mission }: MissionCardProps) {
         <Badge label={SIZE_LABEL[mission.package_size]} variant="neutral" size="small" />
       </View>
 
+      {/* ── Relais assigné ── */}
+      {(mission.partner_first_name || mission.partner_last_name) ? (
+        <View style={styles.personRow}>
+          <View style={[styles.personAvatar, { backgroundColor: colors.primaryLight }]}>
+            <Text variant="caption" style={{ color: colors.primary }}>
+              {mission.partner_first_name?.[0]?.toUpperCase() ?? '?'}
+            </Text>
+          </View>
+          <Text variant="caption" color="textSecondary">
+            Pris en charge par{' '}
+            <Text variant="caption" style={{ color: colors.text }}>
+              {mission.partner_first_name} {mission.partner_last_name}
+            </Text>
+          </Text>
+        </View>
+      ) : (
+        mission.status === 'pending' && (
+          <View style={styles.personRow}>
+            <Ionicons name="time-outline" size={13} color={colors.textTertiary} />
+            <Text variant="caption" color="textTertiary" style={{ marginLeft: Spacing.xs }}>
+              En attente d'un Voisin-Relais
+            </Text>
+          </View>
+        )
+      )}
+
       {/* ── Adresses avec connecteur vertical ── */}
       <View style={styles.addrBlock}>
         <View style={styles.addrTrack}>
@@ -259,6 +285,15 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  personAvatar: {
+    width: 22, height: 22, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
   },
   cardTitle: {
     flex: 1,
