@@ -75,13 +75,15 @@ export default function HomeScreen() {
 
   // ── Missions proches ──────────────────────────────────────────────────────
   const fetchMissions = useCallback(() => {
+    // Seuls les partners ont besoin des missions proches sur la carte
+    if (!isPartner) return;
     if (region.latitude === DEFAULT_REGION.latitude) return;
     apiGet<{ missions: Mission[] }>(
-      `/api/missions?lat=${region.latitude}&lng=${region.longitude}&radius=5`
+      `/api/missions?lat=${region.latitude}&lng=${region.longitude}&radius=5000`
     )
       .then((data) => setMissions(data.missions ?? []))
       .catch(() => {});
-  }, [region.latitude, region.longitude]);
+  }, [isPartner, region.latitude, region.longitude]);
 
   useEffect(() => {
     fetchMissions();
@@ -122,7 +124,9 @@ export default function HomeScreen() {
     return colors.primary;
   };
 
-  const pendingMissions = missions.filter((m) => m.status === 'pending');
+  // Les marqueurs ne concernent que les partners (missions disponibles à accepter)
+  // Pour les clients, le suivi des colis se fait dans l'onglet "Mes colis"
+  const pendingMissions = isPartner ? missions.filter((m) => m.status === 'pending') : [];
 
   return (
     <View style={styles.root}>
