@@ -86,6 +86,23 @@ function MissionActionCard({ mission, loadingActionId, onAction }: MissionAction
         <Badge label={SIZE_LABEL[mission.package_size]} variant="neutral" size="small" />
       </View>
 
+      {/* ── Client ── */}
+      {(mission.client_first_name || mission.client_last_name) && (
+        <View style={styles.personRow}>
+          <View style={[styles.personAvatar, { backgroundColor: colors.primaryLight }]}>
+            <Text variant="caption" style={{ color: colors.primary }}>
+              {mission.client_first_name?.[0]?.toUpperCase() ?? '?'}
+            </Text>
+          </View>
+          <Text variant="caption" color="textSecondary">
+            Colis de{' '}
+            <Text variant="caption" style={{ color: colors.text }}>
+              {mission.client_first_name} {mission.client_last_name}
+            </Text>
+          </Text>
+        </View>
+      )}
+
       {/* ── Adresses avec connecteur vertical ── */}
       <View style={styles.addrBlock}>
         {/* Colonne gauche : dots + ligne */}
@@ -410,6 +427,15 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  personAvatar: {
+    width: 22, height: 22, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
   },
   cardTitle: {
     flex: 1,
