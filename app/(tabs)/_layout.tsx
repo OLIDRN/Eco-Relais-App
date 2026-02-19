@@ -4,9 +4,12 @@ import React from 'react';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColors } from '@/hooks/use-theme-color';
+import { useAuth } from '@/contexts/auth-context';
 
 export default function TabLayout() {
   const colors = useThemeColors();
+  const { user } = useAuth();
+  const isPartner = user?.role === 'partner';
 
   return (
     <Tabs
@@ -41,6 +44,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <IconSymbol size={24} name="shippingbox.fill" color={color} />
           ),
+          href: isPartner ? null : undefined,
         }}
       />
       <Tabs.Screen
