@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Pressable, Modal } from 'react-native';
+import { View, StyleSheet, Pressable, Modal, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -191,12 +191,16 @@ export default function HomeScreen() {
       {/* ── Footer overlay ─────────────────────────────────────────────── */}
       <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">
         {permissionDenied && (
-          <View style={[styles.banner, { backgroundColor: colors.errorLight }]} pointerEvents="none">
+          <Pressable
+            style={[styles.banner, { backgroundColor: colors.errorLight }]}
+            onPress={() => Linking.openSettings()}
+          >
             <Ionicons name="warning-outline" size={15} color={colors.error} />
             <Text variant="caption" color="error" style={{ marginLeft: Spacing.xs, flex: 1 }}>
-              Activez la géolocalisation pour voir les relais proches.
+              Géolocalisation désactivée — Appuyez pour ouvrir les paramètres
             </Text>
-          </View>
+            <Ionicons name="chevron-forward" size={13} color={colors.error} />
+          </Pressable>
         )}
 
         {pendingMissions.length > 0 && (
