@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Card, Badge, ScreenContainer } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
+import { useAuth } from '@/contexts/auth-context';
 import { apiGet } from '@/services/api';
 import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { Mission, MissionStatus, PackageSize } from '@/types/api';
@@ -96,6 +97,8 @@ function MissionCard({ mission }: MissionCardProps) {
 
 export default function PackagesScreen() {
   const colors = useThemeColors();
+  const { user } = useAuth();
+  const isClient = user?.role === 'client';
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -174,7 +177,9 @@ export default function PackagesScreen() {
               Aucun colis pour le moment
             </Text>
             <Text variant="bodySmall" color="textTertiary" center>
-              Appuyez sur "Envoyer un colis" pour créer votre première mission
+              {isClient
+                ? 'Appuyez sur "Envoyer un colis" pour créer votre première mission'
+                : 'Vos colis envoyés apparaîtront ici'}
             </Text>
           </Card>
         )}
@@ -188,20 +193,22 @@ export default function PackagesScreen() {
         <View style={styles.fabSpacer} />
       </ScreenContainer>
 
-      {/* FAB */}
-      <Pressable
-        onPress={() => router.push('/mission-create')}
-        style={({ pressed }) => [
-          styles.fab,
-          { backgroundColor: colors.primary, ...Shadows.lg },
-          pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
-        ]}
-      >
-        <Ionicons name="add" size={24} color="#fff" />
-        <Text variant="button" style={styles.fabLabel}>
-          Envoyer un colis
-        </Text>
-      </Pressable>
+      {/* FAB — clients uniquement */}
+      {isClient && (
+        <Pressable
+          onPress={() => router.push('/mission-create')}
+          style={({ pressed }) => [
+            styles.fab,
+            { backgroundColor: colors.primary, ...Shadows.lg },
+            pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
+          ]}
+        >
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text variant="button" style={styles.fabLabel}>
+            Envoyer un colis
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
