@@ -3,7 +3,7 @@ import { View, StyleSheet, ActivityIndicator, Pressable, RefreshControl } from '
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Text, Card, Badge, ScreenContainer } from '@/components/ui';
+import { Text, Card, Badge, ScreenContainer, Divider } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet } from '@/services/api';
@@ -49,36 +49,45 @@ function MissionCard({ mission }: MissionCardProps) {
 
   return (
     <Card style={styles.card}>
-      {/* Ligne 1 : titre + taille */}
-      <View style={styles.cardRow}>
+
+      {/* ── Header : titre + badge taille ── */}
+      <View style={styles.cardHeader}>
         <Text variant="label" style={styles.cardTitle} numberOfLines={1}>
           {mission.package_title}
         </Text>
         <Badge label={SIZE_LABEL[mission.package_size]} variant="neutral" size="small" />
       </View>
 
-      {/* Ligne 2 : adresses */}
-      <View style={[styles.cardRow, styles.addressRow]}>
-        <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-        <Text variant="bodySmall" color="textSecondary" style={styles.address} numberOfLines={1}>
-          {mission.pickup_address}
-        </Text>
-        <Ionicons name="arrow-forward" size={14} color={colors.textTertiary} />
-        <Text variant="bodySmall" color="textSecondary" style={styles.address} numberOfLines={1}>
-          {mission.delivery_address}
-        </Text>
+      {/* ── Adresses avec connecteur vertical ── */}
+      <View style={styles.addrBlock}>
+        <View style={styles.addrTrack}>
+          <View style={[styles.addrDot, { backgroundColor: colors.primary }]} />
+          <View style={[styles.addrConnector, { backgroundColor: colors.border }]} />
+          <View style={[styles.addrDot, { backgroundColor: colors.accent }]} />
+        </View>
+        <View style={styles.addrTexts}>
+          <Text variant="bodySmall" color="textSecondary" numberOfLines={1}>
+            {mission.pickup_address}
+          </Text>
+          <View style={{ height: Spacing.md }} />
+          <Text variant="bodySmall" color="textSecondary" numberOfLines={1}>
+            {mission.delivery_address}
+          </Text>
+        </View>
       </View>
 
-      {/* Ligne 3 : créneau */}
-      <View style={[styles.cardRow, styles.slotRow]}>
-        <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-        <Text variant="caption" color="textSecondary" style={{ marginLeft: Spacing.xs }}>
+      {/* ── Créneau ── */}
+      <View style={styles.timeRow}>
+        <Ionicons name="time-outline" size={13} color={colors.textTertiary} />
+        <Text variant="caption" color="textTertiary" style={{ marginLeft: Spacing.xs }}>
           {mission.pickup_time_slot}
         </Text>
       </View>
 
-      {/* Ligne 4 : statut + prix + date */}
-      <View style={[styles.cardRow, styles.footerRow]}>
+      <Divider spacing="sm" />
+
+      {/* ── Footer : statut + prix + date ── */}
+      <View style={styles.cardFooter}>
         <Badge label={statusConfig.label} variant={statusConfig.variant} size="small" />
         <View style={styles.footerRight}>
           <Text variant="label" color="primary">
@@ -89,6 +98,7 @@ function MissionCard({ mission }: MissionCardProps) {
           </Text>
         </View>
       </View>
+
     </Card>
   );
 }
@@ -245,7 +255,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     gap: Spacing.sm,
   },
-  cardRow: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -253,19 +263,37 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: Spacing.sm,
   },
-  addressRow: {
-    gap: Spacing.xs,
+  addrBlock: {
+    flexDirection: 'row',
+    gap: Spacing.md,
   },
-  address: {
+  addrTrack: {
+    alignItems: 'center',
+    paddingTop: 3,
+  },
+  addrDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  addrConnector: {
+    width: 1.5,
     flex: 1,
-    flexShrink: 1,
+    minHeight: Spacing.lg,
+    marginVertical: 3,
   },
-  slotRow: {
-    gap: Spacing.xs,
-  },
-  footerRow: {
+  addrTexts: {
+    flex: 1,
     justifyContent: 'space-between',
-    marginTop: Spacing.xs,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   footerRight: {
     flexDirection: 'row',
