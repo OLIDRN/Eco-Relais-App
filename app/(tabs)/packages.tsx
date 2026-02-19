@@ -1,8 +1,6 @@
 import { useCallback, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Card, Badge, ScreenContainer } from '@/components/ui';
@@ -141,14 +139,12 @@ export default function PackagesScreen() {
         }
       >
         {/* Header */}
-        <SafeAreaView edges={['top']}>
-          <View style={styles.header}>
-            <Text variant="h3">Mes colis</Text>
-            <Text variant="body" color="textSecondary">
-              Suivez vos envois
-            </Text>
-          </View>
-        </SafeAreaView>
+        <View style={styles.header}>
+          <Text variant="h3">Mes colis</Text>
+          <Text variant="body" color="textSecondary">
+            Suivez vos envois
+          </Text>
+        </View>
 
         {/* Loading */}
         {loading && (
