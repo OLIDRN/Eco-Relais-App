@@ -42,7 +42,7 @@ const SIZE_LABEL: Record<PackageSize, string> = {
 };
 
 function formatPrice(price: number): string {
-  return (price ?? 0).toFixed(2).replace('.', ',') + ' €';
+  return (Number(price) || 0).toFixed(2).replace('.', ',') + ' €';
 }
 
 // ── MissionActionCard ──────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function MissionActionCard({ mission, loadingActionId, onAction }: MissionAction
         <View style={styles.earningsChip}>
           <Text variant="caption" color="textTertiary">Gains </Text>
           <Text variant="label" color="primary">
-            {formatPrice(mission.price - mission.commission)}
+            {formatPrice(Number(mission.price) - Number(mission.commission))}
           </Text>
         </View>
       </View>

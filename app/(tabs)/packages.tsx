@@ -30,7 +30,7 @@ const SIZE_LABEL: Record<PackageSize, string> = {
 };
 
 function formatPrice(price: number): string {
-  return (price ?? 0).toFixed(2).replace('.', ',') + ' €';
+  return (Number(price) || 0).toFixed(2).replace('.', ',') + ' €';
 }
 
 function formatDate(iso: string): string {
