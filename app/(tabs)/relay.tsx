@@ -107,10 +107,13 @@ function MissionActionCard({ mission, loadingActionId, onAction }: MissionAction
 
       <Divider spacing="sm" />
 
-      {/* Ligne 4 : statut + prix */}
+      {/* Ligne 4 : statut + gains partenaire */}
       <View style={[styles.cardRow, styles.footerRow]}>
         <Badge label={statusConfig.label} variant={statusConfig.variant} size="small" />
-        <Text variant="label" color="primary">{formatPrice(mission.price)}</Text>
+        <View style={styles.earningsInline}>
+          <Text variant="caption" color="textTertiary">Vos gains </Text>
+          <Text variant="label" color="primary">{formatPrice(mission.price - mission.commission)}</Text>
+        </View>
       </View>
 
       {/* Bouton itinéraire */}
@@ -407,6 +410,10 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     justifyContent: 'space-between',
+  },
+  earningsInline: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   navBtn: {
     flexDirection: 'row',
