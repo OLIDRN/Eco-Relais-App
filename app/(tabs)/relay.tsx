@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, RefreshControl, Pressable, Platform, Linking } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,6 +11,18 @@ import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { Mission, MissionStatus, PackageSize, ApiError } from '@/types/api';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+function openNavigation(lat: number, lng: number) {
+  if (lat === 0 && lng === 0) return;
+  const url = Platform.select({
+    ios:     `maps://app?daddr=${lat},${lng}&dirflg=d`,
+    android: `geo:${lat},${lng}?q=${lat},${lng}`,
+    default: `https://maps.google.com/maps?daddr=${lat},${lng}`,
+  });
+  Linking.openURL(url).catch(() =>
+    Linking.openURL(`https://maps.google.com/maps?daddr=${lat},${lng}`)
+  );
+}
 
 type BadgeVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'error' | 'warning' | 'info' | 'neutral';
 
@@ -54,6 +66,15 @@ function MissionActionCard({ mission, loadingActionId, onAction }: MissionAction
 
   const action = ACTION_CONFIG[mission.status];
 
+  // Destination de navigation selon le statut
+  const navTarget =
+    mission.status === 'accepted'
+      ? { lat: mission.pickup_lat,   lng: mission.pickup_lng,   label: 'Point de collecte' }
+      : (mission.status === 'collected' || mission.status === 'in_transit')
+      ? { lat: mission.delivery_lat, lng: mission.delivery_lng, label: 'Point de livraison' }
+      : null;
+  const canNavigate = navTarget !== null && !(navTarget.lat === 0 && navTarget.lng === 0);
+
   return (
     <Card style={styles.missionCard}>
       {/* Ligne 1 : titre + taille */}
@@ -91,6 +112,23 @@ function MissionActionCard({ mission, loadingActionId, onAction }: MissionAction
         <Badge label={statusConfig.label} variant={statusConfig.variant} size="small" />
         <Text variant="label" color="primary">{formatPrice(mission.price)}</Text>
       </View>
+
+      {/* Bouton itinéraire */}
+      {canNavigate && (
+        <Pressable
+          onPress={() => openNavigation(navTarget!.lat, navTarget!.lng)}
+          style={({ pressed }) => [
+            styles.navBtn,
+            { borderColor: colors.border, backgroundColor: pressed ? colors.primaryLight : colors.surface },
+          ]}
+        >
+          <Ionicons name="navigate-outline" size={15} color={colors.primary} />
+          <Text variant="bodySmall" style={{ color: colors.primary, marginLeft: Spacing.xs }}>
+            {navTarget!.label}
+          </Text>
+          <Ionicons name="chevron-forward" size={13} color={colors.primary} style={{ marginLeft: 'auto' }} />
+        </Pressable>
+      )}
 
       {/* Bouton d'action */}
       {action && (
@@ -369,6 +407,15 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     justifyContent: 'space-between',
+  },
+  navBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   actionBtn: {
     marginTop: Spacing.xs,
