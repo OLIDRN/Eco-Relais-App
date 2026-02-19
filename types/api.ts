@@ -1,5 +1,37 @@
 export type UserRole = 'client' | 'partner' | 'admin';
 
+export type PackageSize = 'small' | 'medium' | 'large';
+
+export type MissionStatus =
+  | 'pending'
+  | 'accepted'
+  | 'collected'
+  | 'in_transit'
+  | 'delivered'
+  | 'cancelled';
+
+export interface Mission {
+  id: string;
+  client_id: string;
+  partner_id: string | null;
+  package_photo_url: string | null;
+  package_title: string;
+  package_size: PackageSize;
+  pickup_address: string;
+  pickup_lat: number;
+  pickup_lng: number;
+  delivery_address: string;
+  delivery_lat: number;
+  delivery_lng: number;
+  pickup_time_slot: string;
+  status: MissionStatus;
+  price: number;
+  commission: number;
+  qr_code: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export interface User {
   id: string;
   email: string;
