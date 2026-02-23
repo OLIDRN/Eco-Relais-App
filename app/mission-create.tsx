@@ -6,17 +6,28 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Text, Button, Input } from '@/components/ui';
+import { Text, Button, Input, Card, Badge, Divider } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { apiPost } from '@/services/api';
 import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { PackageSize, Mission, ApiError } from '@/types/api';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+const SIZE_LABEL: Record<PackageSize, string> = {
+  small: 'Petit', medium: 'Moyen', large: 'Grand',
+};
+
+function formatPrice(price: number): string {
+  return (Number(price) || 0).toFixed(2).replace('.', ',') + ' €';
+}
 
 // ── Constantes ─────────────────────────────────────────────────────────────
 
@@ -43,6 +54,9 @@ export default function MissionCreateScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [createdMission, setCreatedMission] = useState<Mission | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   // ── GPS auto-remplissage ──────────────────────────────────────────────────
   const handleGps = useCallback(async () => {
@@ -123,7 +137,7 @@ export default function MissionCreateScreen() {
     }
 
     try {
-      await apiPost<{ success: boolean; mission: Mission }>('/api/missions', {
+      const response = await apiPost<{ success: boolean; mission: Mission }>('/api/missions', {
         package_title: title.trim(),
         package_size: size,
         pickup_address: pickupAddress.trim(),
@@ -134,13 +148,86 @@ export default function MissionCreateScreen() {
         delivery_lng: dLng,
         pickup_time_slot: timeSlot.trim(),
       });
-      router.back();
+      setCreatedMission(response.mission);
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message ?? 'Une erreur est survenue.');
     } finally {
       setLoading(false);
     }
+  }
+
+  // ── Paiement ──────────────────────────────────────────────────────────────
+  async function handlePayNow() {
+    if (!createdMission) return;
+    setPaymentLoading(true);
+    setPaymentError('');
+    try {
+      const data = await apiPost<{ url: string }>('/api/payments/create-checkout', {
+        mission_id: createdMission.id,
+      });
+      await Linking.openURL(data.url);
+      router.back();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setPaymentError(apiErr.message ?? 'Impossible de lancer le paiement.');
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+
+  // ── Step paiement (après création) ────────────────────────────────────────
+  if (createdMission !== null) {
+    return (
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['bottom']}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.successIcon}>
+            <Ionicons name="checkmark-circle" size={72} color={colors.primary} />
+          </View>
+          <Text variant="h4" center>Mission créée !</Text>
+          <Text variant="body" color="textSecondary" center style={styles.subtitle}>
+            Procédez au paiement pour que les Voisins-Relais puissent voir votre colis.
+          </Text>
+
+          <Card variant="outlined" style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <Text variant="label" style={styles.flex1} numberOfLines={1}>
+                {createdMission.package_title}
+              </Text>
+              <Badge label={SIZE_LABEL[createdMission.package_size]} variant="neutral" size="small" />
+            </View>
+            <Divider spacing="sm" />
+            <View style={styles.priceRow}>
+              <Text variant="bodySmall" color="textSecondary">Montant à régler</Text>
+              <Text variant="h5" color="primary">{formatPrice(createdMission.price)}</Text>
+            </View>
+          </Card>
+
+          {paymentError !== '' && (
+            <Text variant="caption" color="error" center style={{ marginTop: Spacing.sm }}>
+              {paymentError}
+            </Text>
+          )}
+        </ScrollView>
+
+        <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          <Button
+            title="Payer maintenant"
+            variant="primary"
+            fullWidth
+            loading={paymentLoading}
+            onPress={handlePayNow}
+            leftIcon={<Ionicons name="card-outline" size={18} color="#fff" />}
+          />
+          <Button
+            title="Plus tard"
+            variant="ghost"
+            fullWidth
+            onPress={() => router.back()}
+          />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -321,5 +408,32 @@ const styles = StyleSheet.create({
   },
   errorText: {
     marginBottom: Spacing.xs,
+  },
+  // Payment step
+  successIcon: {
+    alignItems: 'center',
+    marginTop: Spacing['2xl'],
+    marginBottom: Spacing.lg,
+  },
+  subtitle: {
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  summaryCard: {
+    marginTop: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  flex1: {
+    flex: 1,
+    marginRight: Spacing.sm,
   },
 });

@@ -8,7 +8,7 @@ import { Text, Card, Avatar, Divider, Button, Input } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useTheme } from '@/contexts/theme-context';
 import { useAuth } from '@/contexts/auth-context';
-import { apiGet, apiPut } from '@/services/api';
+import { apiGet, apiPut, apiPost } from '@/services/api';
 import { Spacing, BorderRadius } from '@/constants/theme';
 import { User, ApiError } from '@/types/api';
 
@@ -46,6 +46,8 @@ export default function ProfileScreen() {
 
   // ── Earnings (partner) ────────────────────────────────────────────────────
   const [totalEarnings, setTotalEarnings] = useState<number | null>(null);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutMessage, setPayoutMessage] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -55,6 +57,21 @@ export default function ProfileScreen() {
         .catch(() => {});
     }, [isPartner])
   );
+
+  // ── Payout ────────────────────────────────────────────────────────────────
+  const handlePayout = useCallback(async () => {
+    setPayoutLoading(true);
+    setPayoutMessage('');
+    try {
+      const data = await apiPost<{ amount: number }>('/api/payments/payout', {});
+      setPayoutMessage(`Virement de ${formatEarnings(data.amount)} initié !`);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setPayoutMessage(apiErr.message ?? 'Impossible de lancer le virement.');
+    } finally {
+      setPayoutLoading(false);
+    }
+  }, []);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleEdit = () => {
@@ -162,6 +179,28 @@ export default function ProfileScreen() {
                 <Ionicons name="wallet-outline" size={26} color="#fff" />
               </View>
             </View>
+
+            {payoutMessage !== '' && (
+              <Text
+                variant="caption"
+                style={{
+                  color: payoutMessage.startsWith('Virement') ? 'rgba(255,255,255,0.9)' : '#ffcccc',
+                  marginTop: Spacing.sm,
+                }}
+              >
+                {payoutMessage}
+              </Text>
+            )}
+
+            <Button
+              title="Demander un virement"
+              variant="primary"
+              fullWidth
+              loading={payoutLoading}
+              onPress={handlePayout}
+              leftIcon={<Ionicons name="arrow-up-circle-outline" size={16} color="#fff" />}
+              style={{ marginTop: Spacing.md, backgroundColor: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.4)' }}
+            />
           </Card>
         )}
 
