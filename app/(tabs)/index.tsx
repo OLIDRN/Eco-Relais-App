@@ -4,14 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { Text, Button, Badge } from '@/components/ui';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet, apiPut } from '@/services/api';
 import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
-import { Mission, PackageSize, ApiError } from '@/types/api';
+import { Mission, PackageSize, ApiError, Notification } from '@/types/api';
+import { NotificationsModal } from '@/components/NotificationsModal';
 
 // ── Constantes ─────────────────────────────────────────────────────────────
 
@@ -46,6 +47,10 @@ export default function HomeScreen() {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [missions, setMissions] = useState<Mission[]>([]);
 
+  // Notifications
+  const [unreadCount, setUnreadCount]   = useState(0);
+  const [notifVisible, setNotifVisible] = useState(false);
+
   // Bottom sheet état
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
   const [acceptLoading, setAcceptLoading] = useState(false);
@@ -72,6 +77,13 @@ export default function HomeScreen() {
       mapRef.current?.animateToRegion(userRegion, 1000);
     })();
   }, []);
+
+  // ── Notifications : badge unread ──────────────────────────────────────────
+  useFocusEffect(useCallback(() => {
+    apiGet<{ notifications: Notification[] }>('/api/notifications')
+      .then(d => setUnreadCount(d.notifications.filter(n => !n.read).length))
+      .catch(() => {});
+  }, []));
 
   // ── Missions proches ──────────────────────────────────────────────────────
   const fetchMissions = useCallback(() => {
@@ -166,6 +178,14 @@ export default function HomeScreen() {
           <Text variant="bodySmall" color="textSecondary" style={{ flex: 1 }}>
             {user ? `Bonjour ${user.first_name} 👋` : 'Rechercher une adresse...'}
           </Text>
+          <Pressable onPress={() => setNotifVisible(true)} style={styles.bellBtn} hitSlop={8}>
+            <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
+            {unreadCount > 0 && (
+              <View style={[styles.bellBadge, { backgroundColor: colors.error }]}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : String(unreadCount)}</Text>
+              </View>
+            )}
+          </Pressable>
           <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
             <Text variant="labelSmall" style={{ color: colors.primary }}>
               {user?.first_name?.[0]?.toUpperCase() ?? '?'}
@@ -228,6 +248,13 @@ export default function HomeScreen() {
           />
         )}
       </SafeAreaView>
+
+      {/* ── Modal notifications ────────────────────────────────────────── */}
+      <NotificationsModal
+        visible={notifVisible}
+        onClose={() => setNotifVisible(false)}
+        onNotificationsRead={() => setUnreadCount(0)}
+      />
 
       {/* ── Bottom sheet : détail mission (partner uniquement) ─────────── */}
       <Modal
@@ -345,6 +372,19 @@ const styles = StyleSheet.create({
   avatar: {
     width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
+  },
+  bellBtn: {
+    position: 'relative',
+    padding: 2,
+  },
+  bellBadge: {
+    position: 'absolute', top: -3, right: -3,
+    minWidth: 16, height: 16, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: {
+    color: '#fff', fontSize: 9, fontWeight: '700',
   },
   partnerHint: {
     flexDirection: 'row',

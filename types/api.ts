@@ -57,3 +57,12 @@ export interface ApiError {
   message: string;
   statusCode?: number;
 }
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;      // ex: "mission_accepted", "delivery_completed", "maintenance"
+  message: string;
+  read: boolean;
+  created_at: string;
+}
