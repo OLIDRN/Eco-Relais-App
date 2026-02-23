@@ -10,7 +10,7 @@ import { useTheme } from '@/contexts/theme-context';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet, apiPut, apiPost } from '@/services/api';
 import { Spacing, BorderRadius } from '@/constants/theme';
-import { User, ApiError } from '@/types/api';
+import { User, ApiError, Transaction } from '@/types/api';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,9 @@ export default function ProfileScreen() {
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [payoutMessage, setPayoutMessage] = useState('');
 
+  // ── Payment history (client) ──────────────────────────────────────────────
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
   // ── Email verification ────────────────────────────────────────────────────
   const [verifyToken, setVerifyToken]     = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
@@ -57,10 +60,15 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isPartner) return;
-      apiGet<{ total_earnings: number }>('/api/payments/earnings')
-        .then((d) => setTotalEarnings(d.total_earnings))
-        .catch(() => {});
+      if (isPartner) {
+        apiGet<{ total_earnings: number }>('/api/payments/earnings')
+          .then((d) => setTotalEarnings(d.total_earnings))
+          .catch(() => {});
+      } else {
+        apiGet<{ success: boolean; data: Transaction[] }>('/api/payments')
+          .then((d) => setTransactions(d.data ?? []))
+          .catch(() => {});
+      }
     }, [isPartner])
   );
 
@@ -366,6 +374,36 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
+        {/* ── Historique paiements (client uniquement) ── */}
+        {!isPartner && transactions.length > 0 && (
+          <Card variant="outlined" style={styles.section}>
+            <Text variant="label" style={styles.sectionTitle}>Paiements</Text>
+            {transactions.slice(0, 5).map((tx, i) => (
+              <View key={tx.id}>
+                {i > 0 && <Divider spacing="sm" />}
+                <View style={styles.txRow}>
+                  <View style={[styles.txIcon, { backgroundColor: tx.status === 'completed' ? colors.successLight : colors.backgroundSecondary }]}>
+                    <Ionicons
+                      name={tx.status === 'completed' ? 'checkmark-circle' : 'time-outline'}
+                      size={15}
+                      color={tx.status === 'completed' ? colors.success : colors.textTertiary}
+                    />
+                  </View>
+                  <View style={styles.txInfo}>
+                    <Text variant="bodySmall" numberOfLines={1}>Mission #{tx.mission_id.slice(0, 8)}</Text>
+                    <Text variant="caption" color="textTertiary">
+                      {new Date(tx.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' })}
+                    </Text>
+                  </View>
+                  <Text variant="label" style={{ color: tx.status === 'completed' ? colors.success : colors.textSecondary }}>
+                    {(Number(tx.amount) / 100).toFixed(2).replace('.', ',')} €
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+        )}
+
         {/* ── Déconnexion ── */}
         <Pressable
           onPress={logout}
@@ -502,6 +540,20 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   version: { marginBottom: Spacing.xl },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  txIcon: {
+    width: 30, height: 30,
+    borderRadius: BorderRadius.base,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  txInfo: {
+    flex: 1,
+    gap: 2,
+  },
   verifyBanner: {
     borderWidth: 1,
     borderRadius: BorderRadius.lg,

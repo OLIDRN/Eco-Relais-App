@@ -67,6 +67,14 @@ export interface Notification {
   created_at: string;
 }
 
+export interface Transaction {
+  id: string;
+  mission_id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+}
+
 export interface Dispute {
   id: string;
   mission_id: string;
