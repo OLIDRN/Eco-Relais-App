@@ -49,6 +49,12 @@ export default function ProfileScreen() {
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [payoutMessage, setPayoutMessage] = useState('');
 
+  // ── Email verification ────────────────────────────────────────────────────
+  const [verifyToken, setVerifyToken]     = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError]     = useState('');
+  const [verifySuccess, setVerifySuccess] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       if (!isPartner) return;
@@ -57,6 +63,26 @@ export default function ProfileScreen() {
         .catch(() => {});
     }, [isPartner])
   );
+
+  // ── Verify email ──────────────────────────────────────────────────────────
+  const handleVerifyEmail = useCallback(async () => {
+    if (!verifyToken.trim()) {
+      setVerifyError('Collez le token reçu par email.');
+      return;
+    }
+    setVerifyLoading(true);
+    setVerifyError('');
+    try {
+      await apiPost('/api/auth/verify-email', { token: verifyToken.trim() });
+      setVerifySuccess(true);
+      if (user) updateUser({ ...user, verified: true });
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setVerifyError(apiErr.message ?? 'Token invalide ou expiré.');
+    } finally {
+      setVerifyLoading(false);
+    }
+  }, [verifyToken, user, updateUser]);
 
   // ── Payout ────────────────────────────────────────────────────────────────
   const handlePayout = useCallback(async () => {
@@ -162,6 +188,60 @@ export default function ProfileScreen() {
             </View>
           )}
         </Card>
+
+        {/* ── Vérification email ── */}
+        {!user?.verified && !verifySuccess && (
+          <View style={[styles.verifyBanner, { backgroundColor: colors.warningLight, borderColor: colors.warning }]}>
+            {/* Ligne titre */}
+            <View style={styles.verifyTitleRow}>
+              <View style={[styles.verifyIconWrap, { backgroundColor: colors.warning }]}>
+                <Ionicons name="mail-unread-outline" size={14} color="#fff" />
+              </View>
+              <Text variant="label" style={{ color: colors.warning, flex: 1 }}>
+                Email non vérifié
+              </Text>
+            </View>
+
+            <Text variant="bodySmall" color="textSecondary" style={styles.verifyDesc}>
+              Copiez le token depuis les logs du backend et collez-le ci-dessous pour confirmer votre adresse.
+            </Text>
+
+            <Input
+              value={verifyToken}
+              onChangeText={(v) => { setVerifyToken(v); setVerifyError(''); }}
+              placeholder="Coller le token ici..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              error={verifyError || undefined}
+            />
+
+            <Button
+              title="Confirmer mon adresse"
+              variant="primary"
+              fullWidth
+              loading={verifyLoading}
+              onPress={handleVerifyEmail}
+              leftIcon={<Ionicons name="checkmark-circle-outline" size={16} color="#fff" />}
+              style={styles.verifyBtn}
+            />
+          </View>
+        )}
+
+        {verifySuccess && (
+          <View style={[styles.verifyBanner, { backgroundColor: colors.successLight, borderColor: colors.success }]}>
+            <View style={styles.verifyTitleRow}>
+              <View style={[styles.verifyIconWrap, { backgroundColor: colors.success }]}>
+                <Ionicons name="checkmark" size={14} color="#fff" />
+              </View>
+              <Text variant="label" style={{ color: colors.success, flex: 1 }}>
+                Adresse email confirmée
+              </Text>
+            </View>
+            <Text variant="bodySmall" color="textSecondary" style={styles.verifyDesc}>
+              Votre adresse email a bien été vérifiée.
+            </Text>
+          </View>
+        )}
 
         {/* ── Gains (partner uniquement) ── */}
         {isPartner && totalEarnings !== null && (
@@ -422,4 +502,29 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   version: { marginBottom: Spacing.xl },
+  verifyBanner: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.base,
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  verifyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  verifyIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyDesc: {
+    lineHeight: 18,
+  },
+  verifyBtn: {
+    marginTop: Spacing.xs,
+  },
 });
