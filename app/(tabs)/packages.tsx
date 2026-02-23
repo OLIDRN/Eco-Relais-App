@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
+import { Alert, View, StyleSheet, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,7 +8,7 @@ import { QRDisplayModal } from '@/components/QRDisplayModal';
 import { MissionTimelineModal } from '@/components/MissionTimelineModal';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
-import { apiGet } from '@/services/api';
+import { apiGet, apiPut } from '@/services/api';
 import { Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { Mission, MissionStatus, PackageSize } from '@/types/api';
 
@@ -163,6 +163,7 @@ export default function PackagesScreen() {
   const [error, setError] = useState(false);
   const [qrMission, setQRMission] = useState<Mission | null>(null);
   const [timelineMission, setTimelineMission] = useState<Mission | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const fetchMissions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -179,6 +180,32 @@ export default function PackagesScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  const handleCancelMission = useCallback((mission: Mission) => {
+    Alert.alert(
+      'Annuler la mission',
+      `Voulez-vous vraiment annuler "${mission.package_title}" ?`,
+      [
+        { text: 'Non', style: 'cancel' },
+        {
+          text: 'Oui, annuler',
+          style: 'destructive',
+          onPress: async () => {
+            setTimelineMission(null);
+            setCancellingId(mission.id);
+            try {
+              await apiPut(`/api/missions/${mission.id}/cancel`, {});
+              await fetchMissions();
+            } catch {
+              Alert.alert('Erreur', "Impossible d'annuler la mission. Veuillez réessayer.");
+            } finally {
+              setCancellingId(null);
+            }
+          },
+        },
+      ]
+    );
+  }, [fetchMissions]);
 
   // Rafraîchit à chaque fois que l'écran prend le focus
   useFocusEffect(
@@ -282,7 +309,7 @@ export default function PackagesScreen() {
           mission={timelineMission}
           onClose={() => setTimelineMission(null)}
           onShowQR={(m) => { setTimelineMission(null); setQRMission(m); }}
-          onCancelMission={isClient ? (m) => setTimelineMission(null) : undefined}
+          onCancelMission={isClient ? handleCancelMission : undefined}
         />
       )}
 
