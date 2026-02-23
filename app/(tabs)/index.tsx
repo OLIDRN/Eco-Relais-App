@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Pressable, Modal, Linking } from 'react-native';
+import { View, StyleSheet, Pressable, Modal, Linking, Text as RNText } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -182,7 +182,7 @@ export default function HomeScreen() {
             <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
             {unreadCount > 0 && (
               <View style={[styles.bellBadge, { backgroundColor: colors.error }]}>
-                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : String(unreadCount)}</Text>
+                <RNText style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : String(unreadCount)}</RNText>
               </View>
             )}
           </Pressable>
@@ -385,6 +385,9 @@ const styles = StyleSheet.create({
   },
   bellBadgeText: {
     color: '#fff', fontSize: 9, fontWeight: '700',
+    lineHeight: 16,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   partnerHint: {
     flexDirection: 'row',
