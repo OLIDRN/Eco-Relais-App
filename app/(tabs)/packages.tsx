@@ -4,6 +4,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Card, Badge, ScreenContainer, Divider } from '@/components/ui';
+import { QRDisplayModal } from '@/components/QRDisplayModal';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet } from '@/services/api';
@@ -41,11 +42,13 @@ function formatDate(iso: string): string {
 
 interface MissionCardProps {
   mission: Mission;
+  onShowQR?: (mission: Mission) => void;
 }
 
-function MissionCard({ mission }: MissionCardProps) {
+function MissionCard({ mission, onShowQR }: MissionCardProps) {
   const colors = useThemeColors();
   const statusConfig = STATUS_CONFIG[mission.status];
+  const canShowQR = mission.status !== 'delivered' && mission.status !== 'cancelled';
 
   return (
     <Card style={styles.card}>
@@ -126,6 +129,22 @@ function MissionCard({ mission }: MissionCardProps) {
         </View>
       </View>
 
+      {/* ── Bouton QR (collecte ou livraison selon le statut) ── */}
+      {canShowQR && onShowQR && (
+        <Pressable
+          onPress={() => onShowQR(mission)}
+          style={({ pressed }) => [
+            styles.qrBtn,
+            { borderColor: colors.border, backgroundColor: pressed ? colors.primaryLight : colors.surface },
+          ]}
+        >
+          <Ionicons name="qr-code-outline" size={15} color={colors.primary} />
+          <Text variant="bodySmall" style={{ color: colors.primary, marginLeft: Spacing.xs }}>
+            {mission.status === 'in_transit' ? 'QR de livraison' : 'QR de collecte'}
+          </Text>
+        </Pressable>
+      )}
+
     </Card>
   );
 }
@@ -140,6 +159,7 @@ export default function PackagesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  const [qrMission, setQRMission] = useState<Mission | null>(null);
 
   const fetchMissions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -223,7 +243,7 @@ export default function PackagesScreen() {
 
         {/* Liste */}
         {!loading && !error && missions.map((mission) => (
-          <MissionCard key={mission.id} mission={mission} />
+          <MissionCard key={mission.id} mission={mission} onShowQR={setQRMission} />
         ))}
 
         {/* Espace pour le FAB */}
@@ -245,6 +265,21 @@ export default function PackagesScreen() {
             Envoyer un colis
           </Text>
         </Pressable>
+      )}
+
+      {/* Modal QR code */}
+      {qrMission !== null && (
+        <QRDisplayModal
+          visible
+          qrValue={qrMission.id}
+          missionTitle={qrMission.package_title}
+          hint={
+            qrMission.status === 'in_transit'
+              ? 'Montrez ce code au Voisin-Relais pour confirmer la livraison'
+              : 'Montrez ce code au Voisin-Relais lors de la collecte'
+          }
+          onClose={() => setQRMission(null)}
+        />
       )}
     </View>
   );
@@ -351,5 +386,13 @@ const styles = StyleSheet.create({
   },
   fabLabel: {
     color: '#fff',
+  },
+  qrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
 });
