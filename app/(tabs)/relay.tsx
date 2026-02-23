@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Card, Badge, Button, ScreenContainer, Divider } from '@/components/ui';
+import { QRScannerModal } from '@/components/QRScannerModal';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet, apiPut } from '@/services/api';
@@ -47,21 +48,26 @@ function formatPrice(price: number): string {
 
 // ── MissionActionCard ──────────────────────────────────────────────────────
 
+type ScanAction = 'collect' | 'deliver';
+
 interface MissionActionCardProps {
   mission: Mission;
   loadingActionId: string | null;
   onAction: (mission: Mission) => void;
+  onScanNeeded: (mission: Mission, action: ScanAction) => void;
 }
 
-function MissionActionCard({ mission, loadingActionId, onAction }: MissionActionCardProps) {
+function MissionActionCard({ mission, loadingActionId, onAction, onScanNeeded }: MissionActionCardProps) {
   const colors = useThemeColors();
   const statusConfig = STATUS_CONFIG[mission.status];
   const isLoading = loadingActionId === mission.id;
 
-  const ACTION_CONFIG: Partial<Record<MissionStatus, { label: string; icon: string; variant: 'primary' | 'accent' | 'success' }>> = {
-    accepted:   { label: 'Collecter le colis',      icon: 'cube-outline',     variant: 'primary' },
-    collected:  { label: 'Démarrer la livraison',   icon: 'bicycle-outline',  variant: 'accent' },
-    in_transit: { label: 'Marquer comme livré',     icon: 'checkmark-circle-outline', variant: 'success' },
+  // Toujours utiliser le scan QR (l'ID de mission est toujours disponible)
+  const hasQR = true;
+  const ACTION_CONFIG: Partial<Record<MissionStatus, { label: string; icon: string; variant: 'primary' | 'accent' | 'secondary'; requiresQR: boolean }>> = {
+    accepted:   { label: hasQR ? 'Scanner QR de collecte'  : 'Collecter le colis',    icon: hasQR ? 'qr-code-outline' : 'cube-outline',             variant: 'primary',   requiresQR: hasQR },
+    collected:  { label: 'Démarrer la livraison',                                      icon: 'bicycle-outline',                                       variant: 'accent',    requiresQR: false },
+    in_transit: { label: hasQR ? 'Scanner QR de livraison' : 'Marquer comme livré',   icon: hasQR ? 'qr-code-outline' : 'checkmark-circle-outline',  variant: 'secondary', requiresQR: hasQR },
   };
 
   const action = ACTION_CONFIG[mission.status];
@@ -170,7 +176,13 @@ function MissionActionCard({ mission, loadingActionId, onAction }: MissionAction
           fullWidth
           loading={isLoading}
           leftIcon={<Ionicons name={action.icon as any} size={16} color="#fff" />}
-          onPress={() => onAction(mission)}
+          onPress={() => {
+            if (action.requiresQR) {
+              onScanNeeded(mission, mission.status === 'accepted' ? 'collect' : 'deliver');
+            } else {
+              onAction(mission);
+            }
+          }}
           style={styles.actionBtn}
         />
       )}
@@ -199,6 +211,7 @@ function PartnerView() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [scanContext, setScanContext] = useState<{ mission: Mission; action: ScanAction } | null>(null);
 
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -225,17 +238,12 @@ function PartnerView() {
     }, [fetchData])
   );
 
+  // Action directe (sans scan QR) — uniquement pour "collected → in_transit"
   const handleAction = useCallback(async (mission: Mission) => {
     setLoadingActionId(mission.id);
     setActionError('');
     try {
-      if (mission.status === 'accepted') {
-        await apiPut(`/api/missions/${mission.id}/collect`, {});
-      } else if (mission.status === 'collected') {
-        await apiPut(`/api/missions/${mission.id}/status`, { status: 'in_transit' });
-      } else if (mission.status === 'in_transit') {
-        await apiPut(`/api/missions/${mission.id}/deliver`, {});
-      }
+      await apiPut(`/api/missions/${mission.id}/status`, { status: 'in_transit' });
       await fetchData();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -245,9 +253,45 @@ function PartnerView() {
     }
   }, [fetchData]);
 
+  // Ouvre le scanner pour les actions nécessitant un QR
+  const handleScanNeeded = useCallback((mission: Mission, action: ScanAction) => {
+    setActionError('');
+    setScanContext({ mission, action });
+  }, []);
+
+  // Callback une fois le QR scanné
+  const handleQRScanned = useCallback(async (data: string) => {
+    if (!scanContext) return;
+    const { mission, action } = scanContext;
+    setScanContext(null);
+
+    // Validation : le QR scanné doit correspondre à l'ID de la mission
+    if (data !== mission.id) {
+      setActionError('QR code invalide pour ce colis. Veuillez réessayer.');
+      return;
+    }
+
+    setLoadingActionId(mission.id);
+    setActionError('');
+    try {
+      if (action === 'collect') {
+        await apiPut(`/api/missions/${mission.id}/collect`, {});
+      } else {
+        await apiPut(`/api/missions/${mission.id}/deliver`, {});
+      }
+      await fetchData();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setActionError(apiErr.message ?? 'Une erreur est survenue.');
+    } finally {
+      setLoadingActionId(null);
+    }
+  }, [scanContext, fetchData]);
+
   const activeMissions = missions.filter(m => m.status !== 'cancelled');
 
   return (
+    <>
     <ScreenContainer
       scrollable
       padded
@@ -321,11 +365,21 @@ function PartnerView() {
           mission={mission}
           loadingActionId={loadingActionId}
           onAction={handleAction}
+          onScanNeeded={handleScanNeeded}
         />
       ))}
 
       <View style={{ height: Spacing.xl }} />
     </ScreenContainer>
+
+    {/* Scanner QR — s'affiche par-dessus tout */}
+    <QRScannerModal
+      visible={scanContext !== null}
+      title={scanContext?.action === 'collect' ? 'Scanner QR de collecte' : 'Scanner QR de livraison'}
+      onScan={handleQRScanned}
+      onClose={() => setScanContext(null)}
+    />
+    </>
   );
 }
 
