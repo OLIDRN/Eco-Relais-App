@@ -77,11 +77,12 @@ interface Props {
   onClose: () => void;
   onShowQR?: (m: Mission) => void;
   onCancelMission?: (m: Mission) => void;
+  onReportDispute?: (m: Mission) => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function MissionTimelineModal({ visible, mission, onClose, onShowQR, onCancelMission }: Props) {
+export function MissionTimelineModal({ visible, mission, onClose, onShowQR, onCancelMission, onReportDispute }: Props) {
   const colors    = useThemeColors();
   const translateY = useSharedValue(0);
 
@@ -110,9 +111,10 @@ export function MissionTimelineModal({ visible, mission, onClose, onShowQR, onCa
 
   if (!mission) return null;
 
-  const isCancelled = mission.status === 'cancelled';
-  const canShowQR   = !isCancelled && mission.status !== 'delivered';
-  const canCancel   = mission.status === 'pending' && !!onCancelMission;
+  const isCancelled  = mission.status === 'cancelled';
+  const canShowQR    = !isCancelled && mission.status !== 'delivered';
+  const canCancel    = mission.status === 'pending' && !!onCancelMission;
+  const canDispute   = (mission.status === 'delivered' || mission.status === 'cancelled') && !!onReportDispute;
 
   return (
     <Modal
@@ -264,9 +266,18 @@ export function MissionTimelineModal({ visible, mission, onClose, onShowQR, onCa
                 onPress={() => onCancelMission(mission)}
               />
             )}
+            {canDispute && onReportDispute && (
+              <Button
+                title="Signaler un problème"
+                variant="ghost"
+                fullWidth
+                leftIcon={<Ionicons name="warning-outline" size={16} color={colors.warning} />}
+                onPress={() => { onReportDispute(mission); handleClose(); }}
+              />
+            )}
             <Button
               title="Fermer"
-              variant={canShowQR || canCancel ? 'ghost' : 'outline'}
+              variant={canShowQR || canCancel || canDispute ? 'ghost' : 'outline'}
               fullWidth
               onPress={handleClose}
             />

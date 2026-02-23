@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text, Card, Badge, ScreenContainer, Divider } from '@/components/ui';
 import { QRDisplayModal } from '@/components/QRDisplayModal';
 import { MissionTimelineModal } from '@/components/MissionTimelineModal';
+import { DisputeModal } from '@/components/DisputeModal';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet, apiPut } from '@/services/api';
@@ -164,6 +165,7 @@ export default function PackagesScreen() {
   const [qrMission, setQRMission] = useState<Mission | null>(null);
   const [timelineMission, setTimelineMission] = useState<Mission | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [disputeMission, setDisputeMission] = useState<Mission | null>(null);
 
   const fetchMissions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -310,8 +312,15 @@ export default function PackagesScreen() {
           onClose={() => setTimelineMission(null)}
           onShowQR={(m) => { setTimelineMission(null); setQRMission(m); }}
           onCancelMission={isClient ? handleCancelMission : undefined}
+          onReportDispute={(m) => { setTimelineMission(null); setDisputeMission(m); }}
         />
       )}
+
+      <DisputeModal
+        visible={disputeMission !== null}
+        mission={disputeMission}
+        onClose={() => setDisputeMission(null)}
+      />
 
       {qrMission !== null && (
         <QRDisplayModal

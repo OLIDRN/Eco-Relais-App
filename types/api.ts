@@ -66,3 +66,13 @@ export interface Notification {
   read: boolean;
   created_at: string;
 }
+
+export interface Dispute {
+  id: string;
+  mission_id: string;
+  raised_by: string;
+  reason: string;
+  status: 'open' | 'in_review' | 'resolved';
+  resolution: string | null;
+  created_at: string;
+}
