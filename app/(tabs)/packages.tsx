@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Card, Badge, ScreenContainer, Divider } from '@/components/ui';
 import { QRDisplayModal } from '@/components/QRDisplayModal';
+import { MissionTimelineModal } from '@/components/MissionTimelineModal';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { apiGet } from '@/services/api';
@@ -43,15 +44,16 @@ function formatDate(iso: string): string {
 interface MissionCardProps {
   mission: Mission;
   onShowQR?: (mission: Mission) => void;
+  onPress?: (mission: Mission) => void;
 }
 
-function MissionCard({ mission, onShowQR }: MissionCardProps) {
+function MissionCard({ mission, onShowQR, onPress }: MissionCardProps) {
   const colors = useThemeColors();
   const statusConfig = STATUS_CONFIG[mission.status];
   const canShowQR = mission.status !== 'delivered' && mission.status !== 'cancelled';
 
   return (
-    <Card style={styles.card}>
+    <Card style={styles.card} onPress={onPress ? () => onPress(mission) : undefined}>
 
       {/* ── Header : titre + badge taille ── */}
       <View style={styles.cardHeader}>
@@ -160,6 +162,7 @@ export default function PackagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [qrMission, setQRMission] = useState<Mission | null>(null);
+  const [timelineMission, setTimelineMission] = useState<Mission | null>(null);
 
   const fetchMissions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -243,7 +246,12 @@ export default function PackagesScreen() {
 
         {/* Liste */}
         {!loading && !error && missions.map((mission) => (
-          <MissionCard key={mission.id} mission={mission} onShowQR={setQRMission} />
+          <MissionCard
+            key={mission.id}
+            mission={mission}
+            onShowQR={setQRMission}
+            onPress={setTimelineMission}
+          />
         ))}
 
         {/* Espace pour le FAB */}
@@ -268,6 +276,16 @@ export default function PackagesScreen() {
       )}
 
       {/* Modal QR code */}
+      {timelineMission !== null && (
+        <MissionTimelineModal
+          visible
+          mission={timelineMission}
+          onClose={() => setTimelineMission(null)}
+          onShowQR={(m) => { setTimelineMission(null); setQRMission(m); }}
+          onCancelMission={isClient ? (m) => setTimelineMission(null) : undefined}
+        />
+      )}
+
       {qrMission !== null && (
         <QRDisplayModal
           visible
